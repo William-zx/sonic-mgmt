@@ -57,8 +57,15 @@
       when: "testbed_facts['vm_base'] != ''"
     when: testbed_name is defined
 
-  - topo_facts: topo={{ topo }}
+  - name: Gathering topology execpt t0-mclag
+    topo_facts: topo={{ topo }}
     connection: local
+    when: topo not in ["t0-mclag", "t0-mclag-16"]
+
+  - name: Gathering t0-mclag information
+    topo_facts: topo="{{ topo }}_dut{{dut_no}}"
+    connection: local
+    when: topo in ["t0-mclag", "t0-mclag-16"] and dut_no is defined
 
   - set_fact:
       VM_topo: "{% if 'ptf' in topo %}False{% else %}True{% endif %}"
