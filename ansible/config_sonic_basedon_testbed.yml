@@ -42,7 +42,7 @@
 
     - name: Gathering testbed information
       test_facts: testbed_name="{{ testbed_name }}" testbed_file="{{ testbed_file }}"
-      connection: local
+      delegate_to: localhost
 
     - fail: msg="The DUT you are trying to run test does not belongs to this testbed"
       when: testbed_facts['dut'] != inventory_hostname
@@ -59,12 +59,12 @@
 
   - name: Gathering topology execpt t0-mclag
     topo_facts: topo={{ topo }}
-    connection: local
+    delegate_to: localhost
     when: topo not in ["t0-mclag", "t0-mclag-16"]
 
   - name: Gathering t0-mclag information
     topo_facts: topo="{{ topo }}_dut{{dut_no}}"
-    connection: local
+    delegate_to: localhost
     when: topo in ["t0-mclag", "t0-mclag-16"] and dut_no is defined
 
   - set_fact:
@@ -73,7 +73,7 @@
 
   - name: gather testbed VM informations
     testbed_vm_info: base_vm={{ testbed_facts['vm_base'] }} topo={{ testbed_facts['topo'] }}
-    connection: local
+    delegate_to: localhost
     when: "VM_topo | bool"
 
   - name: find interface name mapping and individual interface speed if defined
@@ -107,7 +107,7 @@
   - name: create minigraph file in ansible minigraph folder
     template: src=templates/minigraph_template.j2
               dest=minigraph/{{ inventory_hostname}}.{{ topo }}.xml
-    connection: local
+    delegate_to: localhost
     when: local_minigraph is defined and local_minigraph|bool == true
 
   - block:
@@ -127,18 +127,27 @@
         become: true
         when: apply_configlet is defined and apply_configlet|bool == true
 
+      - name: Replace snmp community string
+        lineinfile:
+            name: /etc/sonic/snmp.yml
+            regexp: '^snmp_rocommunity:'
+            line: 'snmp_rocommunity: {{ snmp_rocommunity }}'
+        become: true
+
       - name: disable automatic minigraph update if we are deploying new minigraph into SONiC
         lineinfile:
             name: /etc/sonic/updategraph.conf
             regexp: '^enabled='
             line: 'enabled=false'
         become: true
+        register: updategraph_conf
 
       - name: restart automatic minigraph update service
         become: true
         service:
           name: updategraph
           state: restarted
+        when: updategraph_conf.changed
 
       - name: execute cli "config load_minigraph -y" to apply new minigraph
         become: true

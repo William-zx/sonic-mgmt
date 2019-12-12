@@ -53,7 +53,7 @@
     conn_graph_facts: 
       host={{ dut_name }}
       helper_device={{ helper_device }}
-    connection: local
+    delegate_to: localhost
 
   roles:
     - { role: vm_set, action: 'renumber_topo' }

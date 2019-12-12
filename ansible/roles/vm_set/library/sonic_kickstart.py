@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import datetime
 from telnetlib import Telnet
 
 
@@ -107,7 +108,7 @@ class SerialSession(object):
 
 def session(new_params):
     seq = [
-        ('while true; do if [ $(systemctl is-active bgp) == "active" ]; then break; fi; echo $(systemctl is-active bgp); sleep 1; done', [r'#'], 60),
+        ('while true; do if [ $(systemctl is-active swss) == "active" ]; then break; fi; echo $(systemctl is-active swss); sleep 1; done', [r'#'], 180),
         ('pkill dhclient', [r'#']),
         ('hostname %s' % str(new_params['hostname']), [r'#']),
         ('sed -i s:sonic:%s: /etc/hosts' % str(new_params['hostname']), [r'#']),
@@ -118,7 +119,8 @@ def session(new_params):
         ('echo %s:%s | chpasswd' % (str(new_params['login']), str(new_params['new_password'])), [r'#']),
     ]
 
-    debug = MyDebug('/tmp/debug.%s.txt' % new_params['hostname'], enabled=True)
+    curtime = datetime.datetime.now().isoformat()
+    debug = MyDebug('/tmp/debug.%s.%s.txt' % (new_params['hostname'], curtime), enabled=True)
     ss = SerialSession(new_params['telnet_port'], debug)
     ss.login(new_params['login'], new_params['passwords'])
     ss.configure(seq)
