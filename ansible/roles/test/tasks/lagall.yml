@@ -92,7 +92,7 @@
   delegate_to: "{{ ptf_host }}"
 
 - name: Include testbed topology configuration (to get LAG IP and PTF docker ifaces, that are behind LAG VMs).
-  include_vars: vars/topo_t1-lag.yml
+  include_vars: vars/topo_{{ testbed_type }}.yml
 
 - name: --TEST-- LACP verification on all VMs.
   include_tasks: lag_vm_lacp_test.yml

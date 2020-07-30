@@ -130,6 +130,10 @@ class MtuTest(BaseTest):
             dst_port_list = [31]
         elif self.testbed_type == 't1-64-lag' or self.testbed_type == 't1-64-lag-clet':
             dst_port_list = [58]
+        elif self.testbed_type == 't1-6':
+            dst_port_list = [0, 1, 2]
+        elif self.testbed_type == 't1-9-lag':
+            dst_port_list = [0, 1, 2, 3, 4 ,5]
 
         (matched_index, received) = verify_packet_any_port(self, masked_exp_pkt, dst_port_list)
 

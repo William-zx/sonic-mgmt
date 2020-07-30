@@ -1,12 +1,12 @@
 {# defualt route#}
-{% if testbed_type == 't1' %}
+{% if testbed_type == 't1' or testbed_type == 't1-6' %}
 0.0.0.0/0 {% for ifname, v in minigraph_neighbors.iteritems() %}
 {% if "T2" in v.name %}{{ '[%d]' % minigraph_port_indices[ifname]}}{% if not loop.last %} {% endif %}{% endif %}{% endfor %}
 
 ::/0 {% for ifname, v in minigraph_neighbors.iteritems() %}
 {% if "T2" in v.name %}{{ '[%d]' % minigraph_port_indices[ifname]}}{% if not loop.last %} {% endif %}{% endif %}{% endfor %}
 
-{% elif testbed_type == 't0' or testbed_type == 't0-52'or testbed_type == 't0-64' or testbed_type == 't1-lag' or testbed_type == 't0-64-32' %}
+{% elif testbed_type == 't0' or testbed_type == 't0-52'or testbed_type == 't0-64' or testbed_type == 't1-lag' or testbed_type == 't0-64-32' or testbed_type == 't1-9-lag' %}
 0.0.0.0/0 {% for portchannel, v in minigraph_portchannels.iteritems() %}
 [{% for member in v.members %}{{ '%d' % minigraph_port_indices[member]}}{% if not loop.last %} {% endif %}{% endfor %}]{% if not loop.last %} {% endif %}{% endfor %}
 
@@ -25,14 +25,14 @@
 {% for podset in range(0, [props.podset_number, 10]|min) %}
 {% for tor in range(0, [props.tor_number, 10]|min) %}
 {% for subnet in range(0, props.tor_subnet_number) %}
-{% if testbed_type == 't1' %}
+{% if testbed_type == 't1' or testbed_type == 't1-6' %}
 192.168.{{ podset }}.{{ tor * 16 + subnet }}/32 {% for ifname, v in minigraph_neighbors.iteritems() %}
 {% if "T2" in v.name %}{{ '[%d]' % minigraph_port_indices[ifname]}}{% if not loop.last %} {% endif %}{% endif %}{% endfor %}
 
 20C0:A8{{ '%02X' % podset }}:0:{{ '%02X' % (tor * 16 + subnet)}}::/64 {% for ifname, v in minigraph_neighbors.iteritems() %}
 {% if "T2" in v.name %}{{ '[%d]' %  minigraph_port_indices[ifname]}}{% if not loop.last %} {% endif %}{% endif %}{% endfor %}
 
-{% elif testbed_type == 't1-lag' %}
+{% elif testbed_type == 't1-lag' or testbed_type == 't1-9-lag' %}
 192.168.{{ podset }}.{{ tor * 16 + subnet }}/32 {% for portchannel, v in minigraph_portchannels.iteritems() %}
 [{% for member in v.members %}{{ '%d' % minigraph_port_indices[member]}}{% if not loop.last %} {% endif %}{% endfor %}]{% if not loop.last %} {% endif %}{% endfor %}
 
@@ -81,7 +81,7 @@
 {% endfor %}
 {% endfor %}
 {# routes to downlink #}
-{% if testbed_type == 't1' or testbed_type == 't1-lag' %}
+{% if testbed_type == 't1' or testbed_type == 't1-lag' or testbed_type == 't1-6' or testbed_type == 't1-9-lag' %}
 {% for ifname, v in minigraph_neighbors.iteritems() %}
 {% if "T0" in v.name %}
 {% for subnet in range(0, props_tor.tor_subnet_number) %}

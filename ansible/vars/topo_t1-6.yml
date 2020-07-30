@@ -1,0 +1,184 @@
+topology:
+  VMs:
+    ARISTA01T2:
+      vlans:
+        - 0
+      vm_offset: 0
+    ARISTA02T2:
+      vlans:
+        - 1
+      vm_offset: 1
+    ARISTA03T2:
+      vlans:
+        - 2
+      vm_offset: 2
+    ARISTA01T0:
+      vlans:
+        - 3
+      vm_offset: 3
+    ARISTA02T0:
+      vlans:
+        - 4
+      vm_offset: 4
+    ARISTA03T0:
+      vlans:
+        - 5
+      vm_offset: 5
+
+configuration_properties:
+  common:
+    dut_asn: 65100
+    dut_type: LeafRouter
+    nhipv4: 10.10.246.100
+    nhipv6: FC0A::C9
+  spine:
+    swrole: spine
+    podset_number: 200
+    tor_number: 16
+    tor_subnet_number: 2
+    leaf_asn_start: 62001
+    tor_asn_start: 65501
+    failure_rate: 0
+  tor:
+    swrole: tor
+    tor_subnet_number: 5
+
+configuration:
+  ARISTA01T2:
+    properties:
+    - common
+    - spine
+    bgp:
+      asn: 65200
+      peers:
+        65100:
+        - 10.0.0.0
+        - FC00::1
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.1/32
+        ipv6: 2064:100::1/128
+      Ethernet1:
+        ipv4: 10.0.0.1/31
+        ipv6: fc00::2/126
+    bp_interface:
+      ipv4: 10.10.246.1/24
+      ipv6: fc0a::2/64
+
+  ARISTA02T2:
+    properties:
+    - common
+    - spine
+    bgp:
+      asn: 65200
+      peers:
+        65100:
+        - 10.0.0.2
+        - FC00::5
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.2/32
+        ipv6: 2064:100::2/128
+      Ethernet1:
+        ipv4: 10.0.0.3/31
+        ipv6: fc00::6/126
+    bp_interface:
+      ipv4: 10.10.246.2/24
+      ipv6: fc0a::5/64
+
+  ARISTA03T2:
+    properties:
+    - common
+    - spine
+    bgp:
+      asn: 65200
+      peers:
+        65100:
+        - 10.0.0.4
+        - FC00::9
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.3/32
+        ipv6: 2064:100::3/128
+      Ethernet1:
+        ipv4: 10.0.0.5/31
+        ipv6: fc00::a/126
+    bp_interface:
+      ipv4: 10.10.246.3/24
+      ipv6: fc0a::6/64
+
+  ARISTA01T0:
+    properties:
+    - common
+    - tor
+    tornum: 1
+    bgp:
+      asn: 64001
+      peers:
+        65100:
+        - 10.0.0.6
+        - FC00::D
+    vips:
+      ipv4:
+        prefixes:
+          - 200.0.1.0/26
+        asn: 64700
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.4/32
+        ipv6: 2064:100::4/128
+      Ethernet1:
+        ipv4: 10.0.0.7/31
+        ipv6: fc00::e/126
+    bp_interface:
+      ipv4: 10.10.246.4/24
+      ipv6: fc0a::9/64
+
+  ARISTA02T0:
+    properties:
+    - common
+    - tor
+    tornum: 2
+    bgp:
+      asn: 64002
+      peers:
+        65100:
+        - 10.0.0.8
+        - FC00::11
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.5/32
+        ipv6: 2064:100::5/128
+      Ethernet1:
+        ipv4: 10.0.0.9/31
+        ipv6: fc00::12/126
+    bp_interface:
+      ipv4: 10.10.246.5/24
+      ipv6: fc0a::a/64
+
+  ARISTA03T0:
+    properties:
+    - common
+    - tor
+    tornum: 3
+    bgp:
+      asn: 64003
+      peers:
+        65100:
+        - 10.0.0.10
+        - FC00::15
+    vips:
+      ipv4:
+        prefixes:
+          - 200.0.1.0/26
+        asn: 64700
+    interfaces:
+      Loopback0:
+        ipv4: 100.1.0.6/32
+        ipv6: 2064:100::6/128
+      Ethernet1:
+        ipv4: 10.0.0.11/31
+        ipv6: fc00::16/126
+    bp_interface:
+      ipv4: 10.10.246.6/24
+      ipv6: fc0a::d/64

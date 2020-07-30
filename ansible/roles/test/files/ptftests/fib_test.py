@@ -121,6 +121,10 @@ class FibTest(BaseTest):
         self.src_ports = self.test_params.get('src_ports', None)
         if self.src_ports is None:
             # Provide the list of all UP interfaces with index in sequence order starting from 0
+            if self.test_params['testbed_type'] == 't1-6':
+                self.src_ports = range(0, 6)
+            if self.test_params['testbed_type'] == 't1-9-lag':
+                self.src_ports = range(0, 9)
             if self.test_params['testbed_type'] == 't1' or self.test_params['testbed_type'] == 't1-lag' or self.test_params['testbed_type'] == 't0-64-32':
                 self.src_ports = range(0, 32)
             if self.test_params['testbed_type'] == 't1-64-lag' or self.test_params['testbed_type'] == 't1-64-lag-clet':
