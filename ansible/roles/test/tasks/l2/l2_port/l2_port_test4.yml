@@ -1,0 +1,120 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook verify port MTU function.
+# default port mtu is 9100, sonic use this value as l3 interface mtu.
+# Thus, for l2 mtu, it should be 9100 + 14 (src-mac 6bytes + dst mac 6bytes + eth-length/type 2bytes)
+- block:
+    - set_fact: mtu_config=8000
+    - set_fact: 
+        pkt_len: "{{ mtu_config|int + 14|int }}"
+
+    - name: Modify ptf port mtu to 9000
+      shell: ip link set eth{{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }} mtu 9000 &&ip link set eth{{ test_port_index }} mtu 9000
+      delegate_to: "{{ptf_host}}"
+
+    - template: src=roles/test/templates/l2/l2_port/l2_port_mtu_config.j2
+                dest=/tmp/l2_port_mtu_config.json
+      become: true
+
+    - name: Apply the port mtu configuration
+      vars:
+        command_to_run: "config load -y /tmp/l2_port_mtu_config.json"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - name: Testcase4_step1 Send {{ pkt_len }} length packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ test_port_index }}
+            - dst_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - pkt_len={{ pkt_len }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test4_step1.log --socket-recv-size 16384"
+
+    - set_fact: pkt_len="{{ mtu_config|int + 20|int }}"
+
+    - name: Testcase4_step2 Send {{ pkt_len }} length packet, over mtu
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ test_port_index }}
+            - dst_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - except_receive="False"
+            - pkt_len={{ pkt_len }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test4_step2.log --socket-recv-size 16384"
+
+    - name: Generate nessesary configuration for changing mtu
+      set_fact: mtu_config=1500
+    
+    - set_fact: pkt_len="{{mtu_config|int +14|int}}"
+
+    - template: src=roles/test/templates/l2/l2_port/l2_port_mtu_config.j2
+                dest=/tmp/l2_port_mtu_config.json
+      become: true
+
+    - name: Apply the port mtu configuration
+      vars:
+        command_to_run: "config load -y /tmp/l2_port_mtu_config.json"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - name: Testcase4_step3 Send {{ pkt_len }} length packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ test_port_index }}
+            - dst_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - pkt_len={{ pkt_len }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test4_step3.log --socket-recv-size 16384"
+
+    - set_fact: pkt_len="{{ mtu_config|int + 20|int }}"
+       
+    - name: Testcase4_step4 Send {{ pkt_len }} length packet, over mtu
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ test_port_index }}
+            - dst_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - except_receive="False"
+            - pkt_len={{ pkt_len }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test4_step4.log --socket-recv-size 16384"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case4']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+
+  always:
+    - set_fact: mtu_config=9100
+
+    - name: recover mtu default value  
+      template: src=roles/test/templates/l2/l2_port/l2_port_mtu_config.j2
+                 dest=/tmp/l2_port_mtu_config.json
+      become: true
+
+    - name: Apply the port mtu configuration
+      vars:
+        command_to_run: "config load -y /tmp/l2_port_mtu_config.json"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+

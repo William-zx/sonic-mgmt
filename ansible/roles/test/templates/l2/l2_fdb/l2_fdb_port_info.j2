@@ -1,0 +1,9 @@
+---
+fdb_ports_list: 
+{% for vlan in minigraph_vlans.keys()[:2] %}
+{% for m in minigraph_vlans[vlan].members %}
+  - dev: {{ m }}
+    vid: {{ minigraph_vlans[vlan].vlanid}}
+    port_index: '{{ minigraph_port_indices[m] }}'
+{% endfor %}
+{% endfor %}

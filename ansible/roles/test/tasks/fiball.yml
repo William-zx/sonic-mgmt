@@ -1,0 +1,81 @@
+
+# Set facts for the loganalizer and failed cases
+# - name: Reboot DUT
+#   include: roles/test/tasks/common_tasks/reboot_sonic.yml
+
+- set_fact:
+    testname: fiball
+    out_dir: /tmp/
+    run_dir: /tmp/
+    failed_case: []
+
+- name: Create tmp dir
+  file:
+    path: /tmp/fiball/
+    state: directory
+
+- name: Remove existing IPs from PTF host
+  script: roles/test/files/helpers/remove_ip.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Set unique MACs to PTF interfaces
+  script: roles/test/files/helpers/change_mac.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Copy tests to PTF
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ptf_host}}"
+
+# Gather minigraph facts
+# In the future, we will change it to parse config_db.json, and gather configdb facts
+- name: Gathering minigraph facts about the device
+  minigraph_facts: host={{ inventory_hostname }}
+
+
+# ###################################### Step 1-1 #####################################
+# Run fiball on v4 port rif test
+- name: Setup variables for fiball test. (router interfaces)
+  set_fact:
+    dut_if_vlan:  Vlan1000
+    dut_if_1: PortChannel0001
+    dut_if_2: PortChannel0002
+    dut_if_3: PortChannel0003
+    dut_if_4: PortChannel0004
+    caseslist: 
+      - fiball_testcase_1
+      - fiball_testcase_2
+      - fiball_testcase_3
+      - fiball_testcase_4
+      - fiball_testcase_5
+      - fiball_testcase_6
+      - fiball_testcase_7
+      - fiball_testcase_8
+      - fiball_testcase_9
+
+- name: Setup variables for fiball test. (member ports of router interfaces)
+  set_fact:
+    dut_if_list: "{{  [dut_if_vlan, dut_if_1, dut_if_2, dut_if_3, dut_if_4] }}"
+    dut_if_vlan_port_list: 
+      - "{{ minigraph_vlans[dut_if_vlan]['members'][0] }}"
+      - "{{ minigraph_vlans[dut_if_vlan]['members'][1] }}"
+    dut_if_1_port: "{{ minigraph_portchannels[dut_if_1]['members'][0] }}"
+    dut_if_2_port: "{{ minigraph_portchannels[dut_if_2]['members'][0] }}"
+    dut_if_3_port: "{{ minigraph_portchannels[dut_if_3]['members'][0] }}"
+    dut_if_4_port: "{{ minigraph_portchannels[dut_if_4]['members'][0] }}"
+
+- name:  Setup variables for fiball test. (peer ports of router interfaces)
+  set_fact: 
+    dut_if_vlan_peer_port_list:
+      - "{{ minigraph_port_indices[dut_if_vlan_port_list[0]] }}"
+      - "{{ minigraph_port_indices[dut_if_vlan_port_list[1]] }}"
+    dut_if_1_peer_port: "{{ minigraph_port_indices[dut_if_1_port] }}"
+    dut_if_2_peer_port: "{{ minigraph_port_indices[dut_if_2_port] }}"
+    dut_if_3_peer_port: "{{ minigraph_port_indices[dut_if_3_port] }}"
+    dut_if_4_peer_port: "{{ minigraph_port_indices[dut_if_4_port] }}"
+
+- name: Run v4 fiball test on port rif
+  include: roles/test/tasks/fiball/fiball_runner.yml
+  when: true
+
+- fail: msg="Failed {{failed_case|length}} cases - {{ failed_case }}"
+  when: "{{failed_case|length}} != 0"      

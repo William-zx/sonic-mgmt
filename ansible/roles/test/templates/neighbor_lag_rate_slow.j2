@@ -1,0 +1,10 @@
+enable
+configure
+config
+{% for intf in neighbor_lag_intfs %}
+    interface {{ intf }}
+    lacp rate normal
+    exit
+{% endfor %}
+exit
+exit

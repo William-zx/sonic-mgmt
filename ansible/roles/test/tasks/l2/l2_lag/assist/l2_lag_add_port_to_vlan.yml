@@ -1,0 +1,10 @@
+- set_fact: port_index="{{item}}"
+
+- set_fact: port_name="{{ item.dev }}"
+  when: item.port_index == '{{ port_index }}'
+  with_items: vlan_ports_list
+
+- name: Add Port to vlan
+  shell: config vlan member add {{ vlan_id }} {{ port_name }}
+  become: true
+  ignore_errors: true

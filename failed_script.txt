@@ -1,0 +1,8 @@
+lag_2:				新的判断里面用到了item来做when的判断条件，这个when作用于include的每一个task，当include的文件中， 也用了循环， item的值会变成include循环中的值，导致外部的这个when判断条件失败
+acl:				合并到社区版本27f225f05f56cac2e9c63fba517425a521ef1160 ，并且升级server之后pass
+vnet_vxlan:			现在的vnet_vxlan 的脚本已经不适用铁铮的vrf了
+warm_reboot_net:	依赖 vnet_vxlan 脚本
+crm:				t0 topo 时依赖 vnet_vxlan 脚本，其他topo 可以跑
+hash:				t1 和t1-lag topo 不能跑，需要改脚本
+wr_arp:				这个脚本当时调试时很多错误，改了后脚本还是有问题，找智谦帮忙看一时也没看出问题，然后让先不跑
+qos_sai:			sdk修改RDM40747，SAI_PORT_ATTR_PKT_TX_ENABLE设置disable时报文直接丢弃，不存放在buffer中。脚本无法触发pfc和队列调度。需修改脚本实现。

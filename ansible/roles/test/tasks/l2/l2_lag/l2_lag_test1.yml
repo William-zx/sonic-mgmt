@@ -1,0 +1,151 @@
+
+- set_fact:
+    portchannel_id: 1
+    portchannel_name: PortChannel1
+    portchannel_member_list: [1,2,3,4,5,6,7,8]
+    orphan_port_index_list: [21]
+    vlan_id: 1001
+
+- block:    
+  - name: Generate PortChannel config for PTF
+    template: src=roles/test/templates/l2/l2_lag/l2_lag_ptf_portchannel_config_test1.j2 dest=/tmp/PortChannel{{ portchannel_id }}.conf
+    connection: local
+
+  - name: Copy PortChanenl config files to the PTF host
+    copy: src=/tmp/PortChannel{{ portchannel_id }}.conf dest=/tmp/
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Copy ptf init script to {{ ptf_host }}.
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_lag/assist/l2_lag_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Init portchannel on ptf
+    shell: /tmp/l2_lag_ptf.sh startup_portchannel_test1
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create Vlan{{vlan_id}} 
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Create PortChannel{{portchannel_name}}
+    shell: config portchannel add {{ portchannel_name }}
+    become: true
+  
+  - name: Add {{portchannel_name}} to Vlan{{vlan_id}} with untagged mode
+    shell: config vlan member add {{ vlan_id }} {{ portchannel_name }} --untagged
+    become: true
+
+  - name: Add orphan port to Vlan{{vlan_id}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_port_to_vlan_untagged.yml
+    with_items: "{{ orphan_port_index_list }}"
+
+  - name: Add one member to {{portchannel_name}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items: [1]
+
+  - shell: show interfaces portchannel
+    become: true
+    register: result
+
+  - fail: msg="{{ portchannel_name }} aggregation state not up, error"
+    when: result.stdout.find("{{portchannel_name}}     LACP(A)(Up)") == -1
+
+  - name: Testcase1_step1 Verify l2 traffic can be forwarded through {{portchannel_name}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case1'
+          - test_step='step1'
+          - test_pkt_num=0
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ orphan_port_index_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase1_step1 Testcase1 verify l2 traffic can be forwarded through portchannel\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test1_step1.log"
+
+  - name: Add serven members to {{portchannel_name}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items: [2, 3, 4, 5, 6, 7, 8]
+
+  - shell: show interfaces portchannel
+    become: true
+    register: result
+
+  - fail: msg="{{ portchannel_name }} aggregation state not up, error"
+    when: result.stdout.find("{{portchannel_name}}     LACP(A)(Up)") == -1
+
+  - name: Testcase1_step2 Verify l2 traffic can be forwarded through {{portchannel_name}} 
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case1'
+          - test_step='step2'
+          - test_pkt_num=0
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ orphan_port_index_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase1_step2 Testcase1 verify l2 traffic can be forwarded through portchannel\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/jiang_lag_test1_step2.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_lag_case1']}}"
+
+  always:
+    - name: Del portchannel on ptf
+      shell: /tmp/l2_lag_ptf.sh delete_portchannel_test1
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del member from {{portchannel_name}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_member.yml
+      with_items: "{{ portchannel_member_list }}"
+
+    - name: Del {{portchannel_name}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+    
+    - name: Del Orphan port from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_port_from_vlan.yml
+      with_items: "{{ orphan_port_index_list }}"
+
+    - name: Del {{portchannel_name}}
+      shell: config portchannel del {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+
+    - name: Del Vlan{{vlan_id}} 
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true

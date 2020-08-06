@@ -1,0 +1,462 @@
+#####
+#
+# testbed-github.yaml is designed to be a convenient config file that contains information pertaining to sonic-mgmt
+# the information has been divided into the following groups: 
+#   - device_groups 
+#   - devices
+#   - host_vars
+#   - veos_groups
+#   - veos
+#   - testbed
+#   - topology
+#
+# these groups when converted from yaml in python become dictionaries. 
+# these dictionaries help generate files necessary for ansible to run test cases 
+#
+# where are files generated from: 
+#   - device_groups generates: lab
+#   - devices generates: fanout/secrets.yml, lab/secrets.yml, lab
+#   - host_vars generates: <host_vars>.yml
+#   - veos_groups generates: veos
+#   - veos generates: main.yml, vm_host/creds.yml, sonic_lab_devices.csv, eos/creds.yml, veos
+#   - testbed generates: testbed.csv
+#   - topology generates: sonic_lab_links.csv
+#
+# output files created:
+#   [1]  /group_vars/vm_host/main.yml
+#   [2]  /group_vars/vm_host/creds.yml
+#   [3]  /files/sonic_lab_devices.csv
+#   [4]  /testbed.csv
+#   [5]  /files/sonic_lab_links.csv
+#   [6]  /group_vars/eos/creds.yml
+#   [7]  /group_vars/fanout/secrets.yml
+#   [8]  /group_vars/lab/secrets.yml
+#   [9]  /lab
+#   [10] /veos
+#   [11*] /host_vars/<host_var>.yml (where * is 0 or more)
+#
+#####
+testbed_config:
+    name: testbed-vs
+    alias: topologyVirtualSwitchTestbed
+    type: Virtual
+
+# device_groups is a dictionary that contains the groups that devices and hosts belong to. it also contains global variables under 'vars'
+# device_groups is to export the lab file
+# cross references with devices for ansible_host value
+device_groups:                              
+    lab:
+        children: [sonic, fanout]                                # source: sonic-mgmt/ansible/lab 
+        vars:
+            mgmt_subnet_mask_length: "24"                        # source: sonic-mgmt/ansible/lab
+    sonic:
+        children: [sonic_vs]                                     # source: sonic-mgmt/ansible/lab
+    sonic_vs:
+        host: [vs-1]                                             # source: sonic-mgmt/ansible/lab
+        vars:
+            hwsku: "Force10-S6000"                               # source: sonic-mgmt/ansible/lab
+            iface_speed: '40000'                                 # source: sonic-mgmt/ansible/lab
+            type: kvm                                            # source: sonic-mgmt/ansible/lab
+    fanout:
+        host: [fanout_vs-1]                                      # source: sonic-mgmt/ansible/lab
+    ptf:
+        host: [ptf_vs-t0, ptf_vs-ptf]                        # source: sonic-mgmt/ansible/lab
+
+# devices is a dictionary that contains all devices and hosts but not ptfs (ptfs found under testbed)
+# devices is used to export sonic_lab_devices, fanout/secrets, lab/secrets, lab
+# there are no cross references
+devices:
+    vs-1:                         
+        device_type: DevSonic                       # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv      
+        hwsku: Force10-S6000                        # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+        ansible:                             
+            ansible_host: 10.168.100.151/24        # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+            ansible_ssh_user: admin
+            ansible_ssh_pass: admin
+
+    vs-serv-01:                                     # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+        device_type: server                         # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+        hwsku: TestServ                             # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+        mgmt_subnet_mask_length: "24"               # source: sonic-mgmt/ansible/lab    
+        ansible:
+            ansible_host: 10.168.100.245/24         # source: sonic-mgmt/ansible/files/sonic_lab_devices-github.csv
+            ansible_ssh_pass: root123               # source: sonic-mgmt/ansible/group_vars/lab/secrets.yml
+            ansible_ssh_user: root
+            ansible_become_pass: root123            # source: sonic-mgmt/ansible/group_vars/lab/secrets.yml
+            sonicadmin_user: admin                  # source: sonic-mgmt/ansible/group_vars/lab/secrets.yml
+            sonicadmin_password: admin              # source: sonic-mgmt/ansible/group_vars/lab/secrets.yml
+            sonicadmin_initial_password: YourPaSsWoRd # source: sonic-mgmt/ansible/group_vars/lab/secrets.yml
+
+    ptf_vs-t0:
+        device_type: blank
+        ansible:
+            ansible_host: 10.168.100.100/24
+            ansible_ssh_user: root
+            ansible_ssh_pass: root
+    ptf_vs-ptf:
+        device_type: blank
+        ansible:
+            ansible_host: 10.168.100.100/24
+            ansible_ssh_user: root
+            ansible_ssh_pass: root
+
+    fanout_vs-1:                                   # Not useful for vskvm
+        device_type: fanout
+        alias: VirtualFanout
+        ansible:
+            ansible_host: 10.168.100.1/24
+            ansible_ssh_user: root
+            ansible_ssh_pass: root
+
+# host_vars is a dictionary that contains all host_var values
+# host_vars is used to export the host_vars files
+# there are no cross references
+host_vars:
+    vs-serv-01:
+        mgmt_bridge: br1                # source: sonic-mgmt/host_vars
+        mgmt_prefixlen: 24              # source: sonic-mgmt/host_vars
+        mgmt_gw: 10.168.100.1           # source: sonic-mgmt/host_vars
+        internal_mgmt_port: True        # source: sonic-mgmt/host_vars
+
+# veos_groups is a dictionary that contains all veos groups
+# veos_groups is used to generate the veos file
+# veos_groups cross references veos (below)
+veos_groups:
+    servers:
+        children: [server_1]                                # source: sonic-mgmt/veos
+        vars: 
+            topologies: ['t0', 'ptf32']                     # source: sonic-mgmt/veos
+    server_1:
+        children: [vm_host_1, vms_1]                        # source: sonic-mgmt/veos
+        vars:
+            host_var_file: host_vars/vs-serv-01.yml         # source: sonic-mgmt/veos
+    eos:
+        children: [vms_1]                                   # source: sonic-mgmt/veos                          
+    vms_1:
+        host: [VM0100, VM0101, VM0102, VM0103]              # source: sonic-mgmt/veos
+    vm_host:
+        children: [vm_host_1]                               # source: sonic-mgmt/veos
+    vm_host_1:
+        host: [vs-serv-01]                                  # source: sonic-mgmt/veos
+# veos is a dictionary that contains veos information as well as hosts of children groups from veos_groups
+# veos is used to generate eos/creds, main.yml, vm_host/creds
+# veos_groups pulls information from this dictionary
+veos:                                                   
+    root_path: veos-vm                                              # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    vm_images_url: https://acsbe.blob.core.windows.net/vmimages     # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    cd_image_filename: Aboot-veos-serial-8.0.0.iso                  # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    hdd_image_filename: vEOS-lab-4.15.9M.vmdk                       # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    skip_image_downloading: true                                    # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    vm_console_base: 7000                                           # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    memory: 2097152                                                 # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    max_fp_num: 4                                                   # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+
+    sonic_image_filename: sonic-vs.img                              # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml
+    sonic_console_base: 9000                                        # source: sonic-mgmt/ansible/group_vars/vm_host/main.yml                
+
+    vm_host_ansible:
+        ansible_user: root                                          # source: sonic-mgmt/ansible/group_vars/vm_host/creds.yml
+        ansible_password: root123                                   # source: sonic-mgmt/ansible/group_vars/vm_host/creds.yml
+        ansible_sudo_pass: root123                                  # source: sonic-mgmt/ansible/group_vars/vm_host/creds.yml
+
+    eos_ansible:
+        ansible_user: root                                          # source: sonic-mgmt/ansible/group_vars/eos/creds.yml
+        ansible_password: 123456                                    # source: sonic-mgmt/ansible/group_vars/eos/creds.yml
+        eos_login: admin                                            # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+        eos_password: 123456                                        # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+        eos_default_login: admin                                    # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+        eos_default_password:                                       # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+        eos_root_password: 123456                                   # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+
+    sonic_ansible:
+        sonic_login: admin                                          # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+        sonic_default_passwords:                                    # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+            - YourPaSsWoRd                                          
+            - root123                                               
+            - admin                                              
+        sonic_password: admin                                       # source: sonic-mgmt/ansible/group_vars/all/creds.yml
+
+    vms_1:
+        VM0100:                                                     # source: sonic-mgmt/ansible/veos
+            ansible_host: 10.168.100.10
+        VM0101:
+            ansible_host: 10.168.100.11
+        VM0102:
+            ansible_host: 10.168.100.12
+        VM0103:
+            ansible_host: 10.168.100.13
+
+
+# testbed dictionary contains information about the testbed
+# testbed is used to generate testbed.csv
+# testbed dictionary does not cross reference with other files 
+testbed:
+    vs-ptf:
+        group-name: vs-ptf                                # source: sonic-mgmt/ansible/testbed.csv
+        topo: ptf32                                         # source: sonic-mgmt/ansible/testbed.csv
+        ptf_image_name: docker-ptf                          # source: sonic-mgmt/ansible/testbed.csv
+        ptf_ip: 10.168.100.100/24                           # source: sonic-mgmt/ansible/testbed.csv
+        server: server_1                                    # source: sonic-mgmt/ansible/testbed.csv
+        vm_base:                                            # source: sonic-mgmt/ansible/testbed.csv
+        dut: vs-1                                           # source: sonic-mgmt/ansible/testbed.csv
+        comment: Test ptf32 VirtualSwitch                   # source: sonic-mgmt/ansible/testbed.csv
+
+    vs-t0:                                                # source: sonic-mgmt/ansible/testbed.csv
+        group-name: vs-t0                                 # source: sonic-mgmt/ansible/testbed.csv 
+        topo: t0                                            # source: sonic-mgmt/ansible/testbed.csv
+        ptf_image_name: docker-ptf                          # source: sonic-mgmt/ansible/testbed.csv
+        ptf_ip: 10.168.100.100/24                           # source: sonic-mgmt/ansible/testbed.csv
+        server: server_1                                    # source: sonic-mgmt/ansible/testbed.csv
+        vm_base: VM0100                                     # source: sonic-mgmt/ansible/testbed.csv
+        dut: vs-1                                           # source: sonic-mgmt/ansible/testbed.csv
+        comment: Tests t0 VirtualSwitch                     # source: sonic-mgmt/ansible/testbed.csv
+
+
+# topology dictionary contains information about the topology (which device ports connect to each other)
+# topology is used to generate sonic_lab_links
+# topology dictionary does not cross reference with other files 
+topology:                               # source: sonic-mgmt/ansible/files/sonic_lab_links.csv
+    vs-1:                               # source: sonic-mgmt/ansible/files/sonic_lab_links.csv
+        interfaces:                     # DUT/ start device
+            Ethernet0:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet0
+                Bandwidth: 10000
+                VlanID: 1000
+                VlanMode: Access
+            
+            Ethernet4:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet1
+                Bandwidth: 10000
+                VlanID: 1001
+                VlanMode: Access
+            
+            Ethernet8:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet2
+                Bandwidth: 10000
+                VlanID: 1002
+                VlanMode: Access
+            
+            Ethernet12:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet3
+                Bandwidth: 10000
+                VlanID: 1003
+                VlanMode: Access
+            
+            Ethernet16:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet4
+                Bandwidth: 10000
+                VlanID: 1004
+                VlanMode: Access
+            
+            Ethernet20:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet5
+                Bandwidth: 10000
+                VlanID: 1005
+                VlanMode: Access
+            
+            Ethernet24:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet6
+                Bandwidth: 10000
+                VlanID: 1006
+                VlanMode: Access
+            
+            Ethernet28:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet7
+                Bandwidth: 10000
+                VlanID: 1007
+                VlanMode: Access
+            
+            Ethernet32:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet8
+                Bandwidth: 10000
+                VlanID: 1008
+                VlanMode: Access
+            
+            Ethernet36:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet9
+                Bandwidth: 10000
+                VlanID: 1009
+                VlanMode: Access
+            
+            Ethernet40:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet10
+                Bandwidth: 10000
+                VlanID: 1010
+                VlanMode: Access
+            
+            Ethernet44:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet11
+                Bandwidth: 10000
+                VlanID: 1011
+                VlanMode: Access
+            
+            Ethernet48:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet12
+                Bandwidth: 10000
+                VlanID: 1012
+                VlanMode: Access
+            
+            Ethernet52:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet13
+                Bandwidth: 10000
+                VlanID: 1013
+                VlanMode: Access
+            
+            Ethernet56:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet14
+                Bandwidth: 10000
+                VlanID: 1014
+                VlanMode: Access
+            
+            Ethernet60:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet15
+                Bandwidth: 10000
+                VlanID: 1015
+                VlanMode: Access
+            
+            Ethernet64:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet16
+                Bandwidth: 10000
+                VlanID: 1016
+                VlanMode: Access
+            
+            Ethernet68:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet17
+                Bandwidth: 10000
+                VlanID: 1017
+                VlanMode: Access
+            
+            Ethernet72:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet18
+                Bandwidth: 10000
+                VlanID: 1018
+                VlanMode: Access
+            
+            Ethernet76:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet19
+                Bandwidth: 10000
+                VlanID: 1019
+                VlanMode: Access
+            
+            Ethernet80:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet20
+                Bandwidth: 10000
+                VlanID: 1020
+                VlanMode: Access
+            
+            Ethernet84:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet21
+                Bandwidth: 10000
+                VlanID: 1021
+                VlanMode: Access
+            
+            Ethernet88:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet22
+                Bandwidth: 10000
+                VlanID: 1022
+                VlanMode: Access
+            
+            Ethernet92:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet23
+                Bandwidth: 10000
+                VlanID: 1023
+                VlanMode: Access
+            
+            Ethernet96:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet24
+                Bandwidth: 10000
+                VlanID: 1024
+                VlanMode: Access
+            
+            Ethernet100:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet25
+                Bandwidth: 10000
+                VlanID: 1025
+                VlanMode: Access
+            
+            Ethernet104:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet26
+                Bandwidth: 10000
+                VlanID: 1026
+                VlanMode: Access
+            
+            Ethernet108:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet27
+                Bandwidth: 10000
+                VlanID: 1027
+                VlanMode: Access
+            
+            Ethernet112:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet28
+                Bandwidth: 10000
+                VlanID: 1028
+                VlanMode: Access
+            
+            Ethernet116:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet29
+                Bandwidth: 10000
+                VlanID: 1029
+                VlanMode: Access
+            
+            Ethernet120:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet30
+                Bandwidth: 10000
+                VlanID: 1030
+                VlanMode: Access
+            
+            Ethernet124:
+                EndDevice: fanout_vs-1 
+                EndPort: vnet31
+                Bandwidth: 10000
+                VlanID: 1031
+                VlanMode: Access
+    fanout_vs-1:                         # source: sonic-mgmt/ansible/files/sonic_lab_links.csv
+        interfaces:                      # DUT/ start device
+            vextif_p:
+                EndDevice: vs-serv-01
+                EndPort: vextif
+                Bandwidth: 10000
+                VlanID: 1000-1031
+                VlanMode: Trunk
+
+# docker_registry is optional. It is not necessary unless you want to change the default location of the docker-registry.
+# docker_registry dictionary contains information about the host, username, and password
+# docker_registry is used to generate docker_registry.yaml
+# docker_registry dictionary does not cross reference with other files 
+docker_registry:
+    docker_registry_host: "192.168.11.24:5000"
+    docker_registry_username:
+    docker_registry_password:
+                   
+

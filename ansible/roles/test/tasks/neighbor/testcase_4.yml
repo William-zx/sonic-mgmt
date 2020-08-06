@@ -1,0 +1,168 @@
+# Test Case 4  Verify mac/port change of neighbor
+- name: flush all neigh entry on dut if
+  shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+  become: yes
+
+- name: flush neigh table
+  shell: ip -s -s neigh flush all
+  become: yes
+  delegate_to: "{{ ptf_host }}"
+
+# use second ip addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ip address for ptf
+  set_fact:
+    dut_ip_addr: "{{ dut_ip_neigh_and_mask | ipaddr('address')}}"
+    host_ip_addr_and_mask: "{{ dut_ip_neigh_and_mask | ipaddr(2) }}"
+    host_mac: "00:00:00:22:22:22"
+
+- set_fact:
+    host_ip_addr: "{{host_ip_addr_and_mask.split('/')[0]}}"
+    host_ip_mask: "{{host_ip_addr_and_mask.split('/')[1]}}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ host_ip_addr_and_mask }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Wait some time for enable ipv6 address
+  pause: seconds=5
+
+# ping for tirgger dyanmic neigh resolve
+- name: Execute ping from host to switch to trigger neigh resolve
+  shell: ping6 {{ dut_ip_addr }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# verify ip traffic can be forwarded via this route
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: Neighbor Test
+    ptf_test_dir: ptftests
+    ptf_test_path: arp_test.ArpTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=True
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/neighbor.NeighborTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log" 
+
+# Step 2 change neigh mac of route's nexthop
+- name: change mac of host if
+  shell: ip link set dev eth{{ dut_if_peer_port }} address {{host_mac}}
+  delegate_to: "{{ ptf_host }}"
+
+- name: flush neigh entry on ptf
+  shell: ip -s -s neigh flush all
+  delegate_to: "{{ ptf_host }}"
+
+# ping for tirgger dyanmic neigh resolve again
+- name: Execute ping from host to dut to trigger neigh resolve
+  shell: ping6 {{ dut_ip_addr }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# verify mac of neigh entry is changed
+- name: Use shell to show neigh on dut_if
+  shell: ip -6 neigh show {{host_ip_addr}}
+  register: result
+  become: true
+
+- fail: msg="neigh mac not changed."
+  when: host_mac not in result.stdout
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: neigh Test
+    ptf_test_dir: ptftests
+    ptf_test_path: arp_test.ArpTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=True
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - expected_dst_mac=\"{{ host_mac }}\"
+      - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/neigh.ArpTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+  
+# Step 3 vlan interface only:
+# - send neigh from another vlan member port
+# - verify mac of neigh sourcr is leanrd from new comming vlan member port
+# - verify ip traffic can be forwarded to the correct vlan member port  
+- block:
+  - name: Flush ip address on host if
+    shell: ip addr flush dev eth{{ dut_if_peer_port }}
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Flush neigh on host if
+    shell: ip -s -s neigh flush all
+    delegate_to: "{{ ptf_host }}"
+    
+  - name: Add test IP address to host if2
+    shell: ip addr add {{ host_ip_addr_and_mask }} dev eth{{ dut_if_peer_port_2 }}
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Wait some time for enable ipv6 address
+    pause: seconds=5
+    
+  #  ping to trigger dynamic neigh resolve
+  - name: Execute ping from host to switch
+    shell: ping6 {{ dut_ip_addr }} -c 3 -i 0.2
+    register: pingrc
+    failed_when: pingrc.rc != 0
+    delegate_to: "{{ ptf_host }}"
+
+  # verify ip traffic can be forwarded via this neigh
+  # Choose the last lag interface for ip forwarding test with dut inteface.
+  - name: Generate ptf test params
+    set_fact:
+      forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+      unexpected_ip_addr_list: []
+
+  - name: Wait some time for stream test
+    pause: seconds=5
+
+  - name: Run the test
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+          ptf_test_name: neigh Test
+          ptf_test_dir: ptftests
+          ptf_test_path: arp_test.ArpTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - verbose=True
+            - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+            - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+            - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+            - dst_port={{ dut_if_peer_port_2 }}
+            - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/neigh.ArpTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+  when: rif == 'vlan'

@@ -1,0 +1,83 @@
+# Test Case 3
+
+- name: clear arp table
+  shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+  become: yes
+
+- set_fact:
+    ip_mask: "{{ ip_addr_info['v4-overlap'][0] }}"
+    overlap_ip_mask: "{{ ip_addr_info['v4-overlap'][1] }}"
+    overlap2_ip_mask: "{{ ip_addr_info['v4-overlap'][2] }}"
+
+# step 1 add ip to the rif
+- name: add ip to the rif
+  shell: config interface ip add {{ dut_if }} {{ ip_mask }}
+  become: true
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ ip_mask|ipaddr(2) }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Execute ping from host to switch to validate the ip address
+  shell: ping {{ ip_mask|ipaddr('address') }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# step 2 change ip address netmask(add new one then remove the old one)
+- name: change ip address netmask
+  shell: config interface ip add {{ dut_if }} {{ overlap_ip_mask }}
+  become: true
+
+- name: Del origin IP address on dut if
+  shell: config interface ip remove {{ dut_if }} {{ ip_mask }}
+  become: true
+
+- name: Verify the old ip is removed
+  shell: show ip interfaces
+  register: ips
+  failed_when: ip_mask in ips.stdout
+
+- name: Flush ip addr on host if
+  shell: ip addr flush dev eth{{ dut_if_peer_port }}
+  become: true
+  delegate_to: "{{ ptf_host }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ overlap_ip_mask|ipaddr(2) }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Execute ping from host to switch to validate the new ip is work
+  shell: ping {{ overlap_ip_mask|ipaddr('address') }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# step 3 change ip address with same network and netmask(add new one then remove the old one)
+- name: change ip address with same network and netmask
+  shell: config interface ip add {{ dut_if }} {{ overlap2_ip_mask }}
+  become: true
+
+- name: Del origin IP address on dut if
+  shell: config interface ip remove {{ dut_if }} {{ overlap_ip_mask }}
+  become: true
+
+- name: Verify the old ip is removed
+  shell: show ip interfaces
+  register: ips
+  failed_when: overlap_ip_mask in ips.stdout
+
+- name: Flush ip addr on host if
+  shell: ip addr flush dev eth{{ dut_if_peer_port }}
+  become: true
+  delegate_to: "{{ ptf_host }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ overlap2_ip_mask|ipaddr(2) }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Execute ping from host to switch to validate the new ip is work
+  shell: ping {{ overlap2_ip_mask|ipaddr('address') }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"

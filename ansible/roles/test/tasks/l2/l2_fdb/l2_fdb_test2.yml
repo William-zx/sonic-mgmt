@@ -1,0 +1,108 @@
+# This is the l2_fdb.yml helper playbook, and in this playbook verify 
+# that multicast/broadcast/unknown unicast can be forwarded. 
+
+- set_fact:
+    test_mac1: 00:00:00:00:00:03
+    test_mac2: 00:00:00:00:00:04
+    vlan_id: 201
+    vlan_ports_list: [1,2,3,4,5]
+
+- block:
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Add ports to vlan with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: vlan_ports_list
+
+  - name: Testcase2_step1 Send l2 broadcast traffic with {{test_mac1}} src mac from port1
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case2\"
+          - test_step=\"step1\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"{{test_mac1}}\"
+          - test_mac2=\"{{test_mac2}}\"
+          - test_case_str = \"Testcase2_step1 Send l2 broadcast traffic vith {{test_mac1}} src mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test2_step1.log"
+        
+  - name: Testcase2_step2 Send l2 multicast traffic with {{test_mac1}} src mac from port1
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case2\"
+          - test_step=\"step2\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"{{test_mac1}}\"
+          - test_mac2=\"{{test_mac2}}\"
+          - test_case_str = \"Testcase2_step2 Send l2 multicast traffic vith {{test_mac1}} src mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test2_step2.log"
+        
+  - name: Testcase2_step3 Send l2 unknown unicast traffic with {{test_mac1}} src mac from port1
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case2\"
+          - test_step=\"step3\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"{{test_mac1}}\"
+          - test_mac2=\"{{test_mac2}}\"
+          - test_case_str = \"Testcase2_step3 Send l2 unknown unicast traffic vith {{test_mac1}} src mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test2_step3.log"      
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_fdb_case1']}}"
+
+  always:
+    - name: Del ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: vlan_ports_list
+    
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

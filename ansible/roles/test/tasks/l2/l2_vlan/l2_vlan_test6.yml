@@ -1,0 +1,64 @@
+
+- set_fact:
+    vlan_member_list: [1]
+    vlan_id: 1006
+    dut_ip: 100.100.100.1
+
+- block:
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Config dev ip on ptf
+    shell: /tmp/l2_vlan_ptf.sh startup_vlan_test6
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create Vlan
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Add ports to vlan
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan_untagged.yml
+    with_items: "{{ vlan_member_list }}"
+
+  - name: Config vlan interface IP
+    shell: config interface ip add Vlan{{ vlan_id }} {{ dut_ip }}/16
+    become: true
+
+  - name: ping dut from ptf
+    shell: ping -c 5 {{ dut_ip }}
+    become: true
+    register: result
+    delegate_to: "{{ ptf_host }}"    
+
+  - fail: msg="{{ ping dut from ptf failed! }}"
+    when: result.stdout.find("64 bytes from {{ dut_ip }}:") == -1
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_vlan_case6']}}"
+
+  always:
+    - name: Del dev ip on ptf
+      shell: /tmp/l2_vlan_ptf.sh delete_vlan_test6
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del vlan interface IP
+      shell: config interface ip remove Vlan{{ vlan_id }} {{ dut_ip }}/16
+      become: true
+      ignore_errors: true
+
+    - name: Delete member from vlan
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items:  "{{ vlan_member_list }}"
+
+    - name: Del vlan
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+

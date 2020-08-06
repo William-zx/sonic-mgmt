@@ -1,0 +1,164 @@
+
+- set_fact:
+    portchannel_name: PortChannel1
+    portchannel_member_list: [1,2,3,4]
+    vlan_id_list: [5,6,7,8,9]
+    diff_vid: 50
+    mac1: 10:00:00:00:00:15
+
+- block:
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_lag/assist/l2_lag_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Config portchannel on ptf
+    shell: /tmp/l2_lag_ptf.sh startup_portchannel_general
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create Vlan{{item}}
+    shell: config vlan add {{ item }}
+    become: true
+    with_items: "{{ vlan_id_list }}"
+
+  - name: Add port to the corresponding vlan
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_test15_assist1.yml
+    with_items: "{{ vlan_id_list }}"
+
+  - name: Create {{portchannel_name}}
+    shell: config portchannel add {{ portchannel_name }}
+    become: true
+
+  - name: Add members to {{ portchannel_name }}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items: "{{ portchannel_member_list }}"
+
+  - name: Add {{portchannel_name}} to all vlan
+    shell: config vlan member add {{ item }} {{ portchannel_name }}
+    become: true
+    with_items: "{{ vlan_id_list }}"
+
+  - name: Testcase15_step1 Verify l2 traffic received from {{portchannel_name}} and tagged will be forwarded in the corresponding vlan.
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case15'
+          - test_step='step1'
+          - test_pkt_num=0
+          - test_member_list1=\"{{ portchannel_member_list }}\"
+          - test_member_list2=\"{{ vlan_id_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase15_step1 Verify l2 traffic received from portchannel and tagged will be forwarded in the corresponding vlan.\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test15_step1.log"
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - fail: msg="{{mac1}} not learning in vlan{{item}}, error!"
+#    when: result.stdout.find(" {{item}}  {{mac1}}") == -1
+#    with_items: "{{ vlan_id_list }}"
+
+  - name: Testcase15_step2 Verify l2 traffic received from {{portchannel_name}} and tagged unlike five vlan will be not forwarded in the corresponding vlan.
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case15'
+          - test_step='step2'
+          - test_pkt_num=0
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ vlan_id_list }}\"
+          - test_tag_vid=\"{{ diff_vid }}\"
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase15_step2 Verify l2 traffic received from portchannel and tagged unlike five vlan will be not forwarded in the corresponding vlan.\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test15_step2.log"
+
+  - name: Testcase15_step3 Verify l2 traffic will be tagged with corresponding vlanid sent from {{portchannel_name}}.
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case15'
+          - test_step='step3'
+          - test_pkt_num=0
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ vlan_id_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase15_step3 Verify l2 traffic will be tagged with corresponding vlanid sent from portchannel.\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test15_step3.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_lag_case15']}}"
+
+  always:
+    - name: Del portchannel on ptf
+      shell: /tmp/l2_lag_ptf.sh delete_portchannel_general
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del {{portchannel_name}} from all vlan
+      shell: config vlan member del {{ item }} {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+      with_items: "{{ vlan_id_list }}"
+
+    - name: Del port from the corresponding vlan
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_test15_assist2.yml
+      with_items: "{{ vlan_id_list }}"
+
+    - name: Del member from {{portchannel_name}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_member.yml
+      with_items: "{{ portchannel_member_list }}"
+
+    - name: Del {{portchannel_name}}
+      shell: config portchannel del {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+
+    - name: Del Vlan{{item}}
+      shell: config vlan del {{ item }}
+      become: true
+      ignore_errors: true
+      with_items: "{{ vlan_id_list }}"
+

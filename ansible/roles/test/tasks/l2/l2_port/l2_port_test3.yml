@@ -1,0 +1,88 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook check dut interface status when neighbor   
+# interface shutdown or startup.
+- block:
+    - set_fact:
+        peer_device: "{{neighbors[test_port]['peerdevice']}}"
+        neighbor_interface: "{{neighbors[test_port]['peerport']}}"
+
+    - conn_graph_facts: host={{ peer_device }}
+      connection: local
+
+    - set_fact:
+        peer_host: "{{device_info['mgmtip']}}"
+        peer_hwsku: "{{device_info['HwSku']}}" 
+        peer_type: "{{device_info['Type']}}"
+
+    - name: Shut down neighbor interface {{ neighbor_interface }} on {{ peer_host }}
+      action: apswitch template=neighbor_interface_shut_single.j2
+      args:
+        host: "{{ peer_host }}"
+        login: "{{ switch_login[hwsku_map[peer_hwsku]] }}"
+      connection: switch
+      when: peer_type == "FanoutLeaf"
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $6}'
+      become: true
+      register: result
+
+    - fail: msg="{{ test_port }} Oper status ERROR"
+      when: result.stdout != "down"
+
+    - name: Testcase3_step1 Verify {{ test_port }} can not forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+            - except_receive="False"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test3_step1.log"
+
+    - name: Bring up neighbor interface {{ neighbor_interface }} on {{ peer_host }}
+      action: apswitch template=neighbor_interface_no_shut_single.j2
+      args:
+        host: "{{ peer_host }}"
+        login: "{{ switch_login[hwsku_map[peer_hwsku]] }}"
+      connection: switch
+      when: peer_type == "FanoutLeaf"
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $6}'
+      become: true
+      register: result
+
+    - fail: msg="{{ test_port }} Oper status ERROR"
+      when: result.stdout != "up"
+
+    - name: Testcase3_step2 Verify {{ test_port }} can forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test3_step2.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case3']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+
+  always:
+    - name: Bring up neighbor interface {{ neighbor_interface }} on {{ peer_host }}
+      action: apswitch template=neighbor_interface_no_shut_single.j2
+      args:
+        host: "{{ peer_host }}"
+        login: "{{ switch_login[hwsku_map[peer_hwsku]] }}"
+      connection: switch
+      when: peer_type == "FanoutLeaf"
+

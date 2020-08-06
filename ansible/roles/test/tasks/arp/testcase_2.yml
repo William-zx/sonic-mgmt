@@ -1,0 +1,114 @@
+# Test Case 2 Verify static arp configed and remove
+
+- name: clear arp table
+  shell: sonic-clear arp
+  become: yes
+
+# Step 1 add static arp
+- name: Generate ip addr configuration
+  template: 
+    src: "roles/test/tasks/arp/ip_addr.j2"
+    dest: "/tmp/ip_addr.json"
+  vars:
+    op_cmd: "add"
+    ip_addrs: "{{ [dut_ip_addr_and_mask] }}"
+
+- name: Apply the ip configuration 1
+  vars:
+    command_to_run: "config load -y /tmp/ip_addr.json"
+    errors_expected: false
+  include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+# use second ip addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ip address for static arp
+  set_fact:
+    host_ip_addr_and_mask: "{{ dut_ip_addr_and_mask | ipaddr(2) }}"
+    host_mac: "00:00:00:22:22:22"
+
+- set_fact:
+    host_ip_addr: "{{host_ip_addr_and_mask.split('/')[0]}}"
+    host_ip_mask: "{{host_ip_addr_and_mask.split('/')[1]}}"
+
+- name: Add static arp
+  shell: ip neigh replace {{ host_ip_addr }} lladdr {{ host_mac }} dev {{ dut_if }}
+  become: yes
+
+- name: Add static mac for vlan rif
+  shell: bridge fdb replace {{ host_mac }} dev {{ dut_if_port }} vlan {{ vid }} master static
+  become: yes
+  when: rif=='vlan'
+     
+# verify static arp configured on interface  
+- name: Use shell to show arp on dut_if
+  shell: show arp
+  register: result
+  become: true
+
+- fail: msg="add static arp failed."
+  when: host_ip_addr not in result.stdout
+
+# verify ip traffic can be forwarded via this arp
+- name: Choose the last lag interface for ip forwarding test with dut inteface.
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+
+- name: verify ip traffic can be forwarded via this arp
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ARP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: arp_test.ArpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - expected_dst_mac=\"{{ host_mac }}\"
+          - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+          - dst_port={{ dut_if_peer_port }}
+          - unexpected_ip_addr_list=\"[]\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/arp.ArpTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+    
+# Step 2 delete static arp
+- name: Remove static mac entry
+  shell: bridge fdb del {{ host_mac }} dev {{ dut_if_port }} vlan {{vid}} master
+  become: yes
+  when: rif=='vlan'
+
+- name: Remove static arp
+  shell: ip -s -s neigh del {{ host_ip_addr }} dev {{ dut_if }}
+  become: yes   
+  
+# verify static arp are deleted
+- name: Use shell to show arp on dut_if
+  shell: show arp {{ host_ip_addr }}
+  register: result
+  become: true
+
+- fail: msg="delete static arp failed."
+  when: host_ip_addr in result.stdout and "FAILED" not in result.stdout
+
+# verify ip traffic cannot be forwarded via this arp
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+
+- name: verify ip traffic cannot be forwarded via this arp
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: Arp Test
+    ptf_test_dir: ptftests
+    ptf_test_path: arp_test.ArpTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=False
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - expected_dst_mac=\"{{ host_mac }}\"
+      - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ [host_ip_addr] }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/arp.ArpTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+

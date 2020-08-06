@@ -1,0 +1,152 @@
+# Set facts for the loganalizer and failed cases
+- set_fact:
+    testname: neighbor-v6
+    out_dir: /tmp/
+    run_dir: /tmp/
+    failed_case: []
+
+- name: Create tmp dir
+  file:
+    path: /tmp/neighbor/
+    state: directory
+
+- name: Remove existing IPs from PTF host
+  script: roles/test/files/helpers/remove_ip.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Set unique MACs to PTF interfaces
+  script: roles/test/files/helpers/change_mac.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Copy tests to PTF
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ptf_host}}"
+
+# Gather minigraph facts
+# In the future, we will change it to parse config_db.json, and gather configdb facts
+- name: Gathering minigraph facts about the device
+  minigraph_facts: host={{ inventory_hostname }}
+
+- name: Import all ip addr info from file
+  include_vars: "roles/test/tasks/neighbor/ipneigh_and_route_info.yml"
+
+# Run neighbor test on port rif
+- block:
+  - name: Use the first port of vlan in T0 for port rif test 
+    set_fact:
+      rif: "port"
+      vid:  "{{ minigraph_vlans.keys()[0][4:] }}"
+      dut_if: "{{ minigraph_vlans.values()[0]['members'][0] }}"
+  
+  - name: Remove port from vlan
+    shell: config vlan member del {{ vid }} {{ dut_if }}
+    become: yes
+    ignore_errors: true
+
+  - name: workaround for remove port from vlan. Until rm34965 is fixed.
+    shell: ip link set dev {{ dut_if }} nomaster    
+    become: yes
+
+  - name: Generate ipv6 addr configuration
+    template:
+      src: "roles/test/tasks/neighbor/ip_addr.j2"
+      dest: "/tmp/neighbor/ip_addr.json"
+    vars:
+      op_cmd: "add"
+      ip_addrs: "{{  [dut_ip_neigh_and_mask] }}"
+
+  - name: Apply the ipv6 configuration
+    vars:
+      command_to_run: "config load -y /tmp/neighbor/ip_addr.json"
+      errors_expected: false
+    include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+  - name: Run neighbor test on port rif
+    include: roles/test/tasks/neighbor/neighbor_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[dut_if] }}"
+  
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ dut_ip_neigh_and_mask }}
+      ignore_errors: true
+      become: yes
+
+    - name: Add port to vlan again
+      shell: config vlan member add {{ vid }} {{ dut_if }} -u
+      become: yes
+      ignore_errors: true
+
+# Run neighbor test on vlan rif 
+- block:
+  - name: Use the first vlan for neighbor test on vlan rif 
+    set_fact:
+      rif: "vlan"
+      vid: "{{ minigraph_vlans.keys()[0][4:] }}"
+      dut_if: "{{ minigraph_vlans.keys()[0]}}"
+
+  - name: Generate ipv6 addr configuration
+    template:
+      src: "roles/test/tasks/neighbor/ip_addr.j2"
+      dest: "/tmp/neighbor/ip_addr.json"
+    vars:
+      op_cmd: "add"
+      ip_addrs: "{{  [dut_ip_neigh_and_mask] }}"
+
+  - name: Apply the ipv6 configuration
+    vars:
+      command_to_run: "config load -y /tmp/neighbor/ip_addr.json"
+      errors_expected: false
+    include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+  - set_fact:
+      dut_if_port: "{{ minigraph_vlans[dut_if]['members'][0] }}"
+      dut_if_port_2: "{{ minigraph_vlans[dut_if]['members'][1] }}"
+  
+  - name: Run neighbor test on vlan rif
+    include:  roles/test/tasks/neighbor/neighbor_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[dut_if_port] }}"
+      dut_if_peer_port_2: "{{ minigraph_port_indices[dut_if_port_2] }}"
+
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ dut_ip_neigh_and_mask }}
+      ignore_errors: true
+      become: yes
+
+# Run neighbor test on lag rif
+- block:
+  - name: Use the first lag for neighbor test on lag rif  
+    set_fact:
+      rif: "lag"
+      dut_if: "{{ minigraph_portchannel_interfaces[0]['attachto'] }}"
+
+  - name: Generate ipv6 addr configuration
+    template:
+      src: "roles/test/tasks/neighbor/ip_addr.j2"
+      dest: "/tmp/neighbor/ip_addr.json"
+    vars:
+      op_cmd: "add"
+      ip_addrs: "{{  [dut_ip_neigh_and_mask] }}"
+
+  - name: Apply the ipv6 configuration
+    vars:
+      command_to_run: "config load -y /tmp/neighbor/ip_addr.json"
+      errors_expected: false
+    include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+  - name: Run neighbor test on lag rif
+    include:  roles/test/tasks/neighbor/neighbor_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[minigraph_portchannels[dut_if]['members'][0]] }}"
+
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ dut_ip_neigh_and_mask }}
+      ignore_errors: true
+      become: yes
+
+- fail: msg="Failed {{failed_case|length}} cases - {{ failed_case }}"
+  when: "{{failed_case|length}} != 0"
+

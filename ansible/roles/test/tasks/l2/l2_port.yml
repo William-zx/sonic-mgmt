@@ -1,0 +1,66 @@
+- fail: msg="Invalid testbed_type value '{{testbed_type}}'"
+  when: testbed_type not in [ 't0' ]
+ 
+- set_fact:
+    testname: l2_port
+    out_dir: /tmp/
+    run_dir: /tmp/
+    failed_case: []
+
+- name: Remove existing IPs from PTF host
+  script: roles/test/files/helpers/remove_ip.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Set unique MACs to PTF interfaces
+  script: roles/test/files/helpers/change_mac.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Copy tests to the PTF container
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ ptf_host }}"
+
+- name: Gathering minigraph facts about the device
+  minigraph_facts: host={{ inventory_hostname }}
+
+- name: Collect link facts for Testcase3
+  conn_graph_facts: host={{ inventory_hostname }}
+  connection: local
+
+# Get random rif
+- name: Get Random number
+  set_fact:
+    number: "{{ 20 | random(1,1) }}"
+
+- set_fact:
+    test_port: "{{ minigraph_vlans.values()[0]['members'][number] }}"
+
+- set_fact:
+    test_port_index: "{{ minigraph_port_indices[test_port] }}"
+
+- block:
+  - name: Testcase1 Verify interface admin up/down by json
+    include: roles/test/tasks/l2/l2_port/l2_port_test1.yml
+
+  - name: Tsetcase2 Verify interface admin up/down by cli
+    include: roles/test/tasks/l2/l2_port/l2_port_test2.yml
+
+  - set_fact: neighbors="{{ device_conn }}"
+  
+  - name: Testcase3 Verify interface status by link flapping
+    include: roles/test/tasks/l2/l2_port/l2_port_test3.yml
+
+  - name: Testcase4 Verify interface MTU
+    include: roles/test/tasks/l2/l2_port/l2_port_test4.yml
+
+  - name: Testcase5 Verify rx counter of interface
+    include: roles/test/tasks/l2/l2_port/l2_port_test5.yml
+
+  - name: Testcase6 Verify tx counter of interface
+    include: roles/test/tasks/l2/l2_port/l2_port_test6.yml
+
+  - name: Testcase7 Verify rx-over of interface
+    include: roles/test/tasks/l2/l2_port/l2_port_test7.yml
+
+  - fail: msg="Failed {{failed_case|length}} cases - {{failed_case}}"
+    when: "{{failed_case|length}} != 0"
+

@@ -1,0 +1,143 @@
+
+- set_fact:
+    vlan_member_list_1: [1]
+    vlan_member_list_2: [2]
+    vlan_id_1: 1008
+    vlan_id_2: 1009
+    dut_ip_1: 100.1.1.1
+    ptf_ip_1: 100.1.1.2
+    dut_ip_2: 100.2.1.1
+    ptf_ip_2: 100.2.1.2
+    dut_ip_3: 100.3.1.1
+    dst_net: 100.3.0.0
+    ptf_eth1_mac: 00:11:11:11:11:11
+    ptf_eth2_mac: 00:22:22:22:22:22
+
+- block:
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Config dev ip on ptf
+    shell: /tmp/l2_vlan_ptf.sh startup_vlan_test8
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create Vlan{{vlan_id_1}}
+    shell: config vlan add {{ vlan_id_1 }}
+    become: true
+
+  - name: Create Vlan{{vlan_id_2}}
+    shell: config vlan add {{ vlan_id_2 }}
+    become: true
+ 
+  - set_fact: vlan_id={{ vlan_id_1 }}
+
+  - name: Add ports to Vlan{{vlan_id_1}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan_untagged.yml
+    with_items: "{{ vlan_member_list_1 }}"
+
+  - set_fact: vlan_id={{ vlan_id_2 }}
+
+  - name: Add ports to Vlan{{vlan_id_2}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan_untagged.yml
+    with_items: "{{ vlan_member_list_2 }}"
+
+  - name: Config Vlan{{vlan_id_1}} IP
+    shell: config interface ip add Vlan{{ vlan_id_1 }} {{ dut_ip_1 }}/16
+    become: true
+
+  - name: Config Vlan{{vlan_id_2}} IP
+    shell: config interface ip add Vlan{{ vlan_id_2 }} {{ dut_ip_2 }}/16
+    become: true
+
+  - name: Config static route
+    shell: ip route add {{ dst_net }}/16 via {{ ptf_ip_2 }}
+    become: true
+
+  - name: Config static route on ptf
+    shell: /tmp/l2_vlan_ptf.sh add_route_test8
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: ping ptf from dut
+    shell: ping -c 3 {{ ptf_ip_2}}
+    become: true
+    ignore_errors: true
+
+  - name: Testcase8 verify l3 traffic can be forwarded according to configurable static routing
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+       ptf_test_name: l2_vlan test
+       ptf_test_dir: ptftests
+       ptf_test_path: l2_vlan.L2VlanTest
+       ptf_platform_dir: ptftests
+       ptf_platform: remote
+       ptf_test_params:
+         - testbed_type=\"{{ testbed_type }}\"
+         - test_case=\"case8\"
+         - test_step=\"step1\"
+         - test_member_list1=\"{{ vlan_member_list_1 }}\"
+         - test_member_list2=\"{{ vlan_member_list_2 }}\"
+         - test_vid=\"0\"
+         - test_pvid=\"0\"
+         - test_dut_mac1=\"{{ ansible_Ethernet0['macaddress'] }}\"
+         - test_dut_mac2=\"{{ ansible_Ethernet0['macaddress'] }}\"
+         - test_ptf_mac1=\"{{ ptf_eth1_mac }}\"
+         - test_ptf_mac2=\"{{ ptf_eth2_mac }}\" 
+         - test_ip1=\"{{ ptf_ip_1 }}\"
+         - test_ip2=\"{{ dut_ip_3 }}\"
+         - test_case_str=\"Testcase8 verify l3 traffic can be forwarded according to configurable static routing\"
+       ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test8_step1.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_vlan_case8']}}"
+
+  always:
+    - name: Del static route on ptf
+      shell: /tmp/l2_vlan_ptf.sh delete_route_test8
+      become: true
+      ignore_errors: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del dev ip on ptf
+      shell: /tmp/l2_vlan_ptf.sh delete_vlan_test8
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del Vlan{{vlan_id_1}} IP
+      shell: config interface ip remove Vlan{{ vlan_id_1 }} {{ dut_ip_1 }}/24
+      become: true
+      ignore_errors: true
+    
+    - name: Del Vlan{{vlan_id_2}} IP
+      shell: config interface ip remove Vlan{{ vlan_id_2 }} {{ dut_ip_2 }}/24
+      become: true
+      ignore_errors: true
+ 
+    - set_fact: vlan_id={{ vlan_id_1 }}
+
+    - name: Delete member from Vlan{{vlan_id_1}} 
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_list_1 }}"
+    
+    - set_fact: vlan_id={{ vlan_id_2 }}
+     
+    - name: Delete member from Vlan{{vlan_id_2}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_list_2 }}"
+
+    - name: Del Vlan{{vlan_id_1}}
+      shell: config vlan del {{ vlan_id_1 }}
+      become: true
+      ignore_errors: true
+    
+    - name: Del Vlan{{vlan_id_2}}
+      shell: config vlan del {{ vlan_id_2 }}
+      become: true
+      ignore_errors: true
+

@@ -1,0 +1,20 @@
+# Get random rif
+- name: Get Random number
+  set_fact:      
+    number: "{{ 4 | random(1,1) }}"
+
+- name: shutdown portchannel from ecmp
+  shell: config interface shutdown PortChannel000{{ number }} 
+  become: yes
+
+# Sleep 2 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=2
+
+- name: shutdown portchannel from ecmp
+  shell: config interface startup PortChannel000{{ number }}     
+  become: yes
+
+# Sleep 2 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=2

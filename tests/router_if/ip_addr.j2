@@ -1,0 +1,18 @@
+{
+    {% set VLAN_PREFIX='Vlan' %}
+    {% set LAG_PREFIX='PortChannel'%}
+
+    {% if LAG_PREFIX in dut_if  %}
+    "PORTCHANNEL_INTERFACE": {
+    {% elif VLAN_PREFIX in dut_if %}
+    "VLAN_INTERFACE": {
+    {% else %}
+    "INTERFACE":{
+    {% endif %}
+    {% for ip_addr in ip_addrs %}
+        "{{ dut_if }}": {% if op_cmd=='add' %}{}{%else%}null{% endif %},
+        "{{ dut_if }}|{{ ip_addr }}": {% if op_cmd=='add' %}{}{%else%}null{% endif %} {% if not loop.last %}, {% endif %}
+        
+    {% endfor %}
+    }
+}

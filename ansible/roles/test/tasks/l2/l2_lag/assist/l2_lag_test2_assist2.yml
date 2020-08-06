@@ -1,0 +1,11 @@
+- set_fact: portchannel_name=PortChannel{{ item }}
+
+- shell: show interfaces portchannel
+  become: true
+  register: result
+
+- debug: msg="portchannel={{portchannel_name}}"
+
+- fail: msg="portchannel_ aggregation state not up, error"
+  when: result.stdout.find("{{portchannel_name}}    LACP(A)(Up)") == -1 and result.stdout.find("{{portchannel_name}}     LACP(A)(Up)") == -1
+

@@ -1,0 +1,362 @@
+# Test setup
+- name: Flush all ip address on host rif
+  shell: ip addr flush dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Import all ip addr info from file
+  include_vars: "roles/test/tasks/router_if/ip_addr_info.yml"
+
+- name: Enable promote secondaries on dut_if for supporting ip overlap
+  shell: sysctl -w net.ipv4.conf.{{ dut_if }}.promote_secondaries=1
+  become: true
+
+- block:
+  - set_fact:
+      case_name: "rif_testcase_1-{{ rif }}"
+
+  - name: Run testcase 1 - Verify add ip address with diff mask
+    include: roles/test/tasks/router_if/testcase_1.yml
+
+  rescue:
+    - name: show arp table
+      shell: show arp
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+    
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show 
+      delegate_to: "{{ ptf_host }}"      
+      ignore_errors: true
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+        
+  always:  
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ item }}
+      with_items:
+        "{{ ip_addr_info['v4'] }}"
+      ignore_errors: true
+      become: yes
+
+    - name: clear arp table
+      shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+      become: yes
+
+    - name: Flush all arp on host rif
+      shell: ip -s -s neigh flush all
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+   
+
+- block:
+  - set_fact:
+      case_name: "rif_testcase_2-{{ rif }}"
+
+  - name: Run testcase 2 - Verify remove ip address
+    include: roles/test/tasks/router_if/testcase_2.yml
+
+  rescue:
+    - name: show arp table
+      shell: show arp
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+    
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"      
+      ignore_errors: true
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ item }}
+      with_items:
+        "{{ ip_addr_info['v4'] }}"
+      ignore_errors: true
+      become: yes
+
+    - name: clear arp table
+      shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+      become: yes
+
+    - name: Flush all arp on host rif
+      shell: ip -s -s neigh flush all
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+
+# The behaviors of overlap configuration between SONiC and linux kernel are not consistent.
+# Hence, we do not test the overlap feature until a new requirement publish in the furture.
+
+# - block:
+#   - set_fact:
+#       case_name: "rif_testcase_3-{{ rif }}"
+
+#   - name: Run testcase 3 - Verify ip address overlap
+#     include: roles/test/tasks/router_if/testcase_3.yml
+
+#   rescue:
+#     - name: show arp table
+#       shell: show arp
+#       become: yes
+#       ignore_errors: true
+
+#     - name: show interface ip addr
+#       shell: ip addr show {{ dut_if }}
+#       become: yes
+#       ignore_errors: true
+    
+#     - name: show ptf all interfaces ip addr
+#       shell: ip addr show
+#       delegate_to: "{{ ptf_host }}"      
+#       ignore_errors: true
+
+#     - set_fact:
+#         failed_case: "{{failed_case + [case_name]}}"
+
+#   always:  
+#     - name: Del test IP address on dut if
+#       shell: config interface ip remove {{ dut_if }} {{ item }}
+#       with_items:
+#         "{{ ip_addr_info['v4-overlap'] }}"
+#       ignore_errors: true
+#       become: yes
+
+#     - name: clear arp table
+#       shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+#       become: yes
+
+#     - name: Flush all arp on host rif
+#       shell: ip -s -s neigh flush all
+#       delegate_to: "{{ ptf_host }}"
+
+#     - name: Flush all ip address on host rif
+#       shell: ip addr flush dev eth{{ dut_if_peer_port }}
+#       delegate_to: "{{ ptf_host }}"
+    
+
+- block:
+  - set_fact:
+      case_name: "rif_testcase_4-{{ rif }}"
+
+  - name: Run testcase 4 - Verify add ipv6 address with diff mask
+    include: roles/test/tasks/router_if/testcase_4.yml
+
+  rescue:
+    - name: show neigh table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ item }}
+      with_items:
+        "{{ ip_addr_info['v6']['global'] }}"
+      ignore_errors: true
+      become: yes
+
+    - name: clear arp table
+      shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+      become: yes
+
+    - name: Flush all arp on host rif
+      shell: ip -s -s neigh flush all
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+    
+
+- block:
+  - set_fact:
+      case_name: "rif_testcase_5-{{ rif }}"
+
+  - name: Run testcase 5 - Verify add ipv6 link-local and site-local address
+    include: roles/test/tasks/router_if/testcase_5.yml
+
+  rescue:
+    - name: show arp table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ item }}
+      with_items:
+        "{{ ip_addr_info['v6']['link'] + ip_addr_info['v6']['unique'] }}"
+      ignore_errors: true
+      become: yes
+
+    - name: clear arp table
+      shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+      become: yes
+
+    - name: Flush all arp on host rif
+      shell: ip -s -s neigh flush all
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+
+- block:
+  - set_fact:
+      case_name: "rif_testcase_6-{{ rif }}"
+
+  - name: Run testcase 6 - Verify remove ipv6 address
+    include: roles/test/tasks/router_if/testcase_6.yml
+
+  rescue:
+    - name: show neigh table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: Del test IP address to dut if
+      shell: config interface ip remove {{ dut_if }} {{ item }}
+      with_items:
+        "{{ ip_addr_info['v6']['global'] }}"
+      ignore_errors: true
+      become: yes
+
+    - name: clear arp table
+      shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+      become: yes
+
+    - name: Flush all arp on host rif
+      shell: ip -s -s neigh flush all
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+
+# The behaviors of overlap configuration between SONiC and linux kernel is not consistent.
+# Hence, we do not test the overlap feature until a new requirement publish in the furture.
+
+# - block:
+#   - set_fact:
+#       case_name: "rif_testcase_7-{{ rif }}"
+
+#   - name: Run testcase 7 - Verify ipv6 address overlap
+#     include: roles/test/tasks/router_if/testcase_7.yml
+
+#   rescue:
+#     - name: show neigh table
+#       shell: ip -6 neigh show
+#       become: yes
+#       ignore_errors: true
+
+#     - name: show interface ip addr
+#       shell: ip addr show {{ dut_if }}
+#       become: yes
+#       ignore_errors: true
+
+#     - name: show neigh table on ptf_host
+#       shell: ip -6 neigh show
+#       delegate_to: "{{ ptf_host }}"      
+#       ignore_errors: true
+
+#     - name: show ptf all interfaces ip addr
+#       shell: ip addr show
+#       delegate_to: "{{ ptf_host }}"      
+#       ignore_errors: true
+
+#     - set_fact:
+#         failed_case: "{{failed_case + [case_name]}}"
+
+#   always:  
+#     - name: Del test IP address to dut if
+#       shell: config interface ip remove {{ dut_if }} {{ item }}
+#       with_items:
+#         "{{ ip_addr_info['v6-overlap'] }}"
+#       ignore_errors: true
+#       become: yes
+
+#     - name: clear arp table
+#       shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+#       become: yes
+
+#     - name: Flush all arp on host rif
+#       shell: ip -s -s neigh flush all
+#       delegate_to: "{{ ptf_host }}"
+
+#     - name: Flush all ip address on host rif
+#       shell: ip addr flush dev eth{{ dut_if_peer_port }}
+#       delegate_to: "{{ ptf_host }}"

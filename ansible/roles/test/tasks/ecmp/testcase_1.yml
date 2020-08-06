@@ -1,0 +1,197 @@
+# Test Case 1 Verify ecmp group and group member create/remove
+
+# if before 201811 use ip addrs order to set
+#- block:
+#  - name: Add test IP address to dut if
+#    shell: sudo ip addr add {{ item }} dev {{ dut_if }}  
+#    with_items:
+#      "{{ ip_addr_info['v4'][3] }}"
+#  when: use_config_json == false
+
+# Step 1 verify that ecmp is work in the default configuration of the t0 topology(use default route)
+- name: Gernerate test ip address for host if
+  set_fact:
+    host_ip_addr_list: "{{ ip_addr_ecmp_info['v4'] }}"
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    unexpected_ip_addr_list: []
+
+- name: Gernerate test ip address for host if
+  set_fact:
+    dut_peer_port_list: "{{ ip_addr_ecmp_info['dst_port'] }}"  
+
+# verify traffic can be load-balance(src-ip)    
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_1.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 2 Verify traffic still load-balance by the rest of nexthop,after one of the nexthop link down in Ecmp
+- name: shutdown portchannel0001 from ecmp
+  shell: config interface shutdown PortChannel0001 
+  become: yes
+
+# Sleep 5 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=10
+
+# verify traffic can be load-balance(src-ip)  
+- name: Gernerate test ip address for host if
+  set_fact:
+    dut_peer_port_list_1: "{{ ip_addr_ecmp_info['dst_port_d'] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list_1 }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_1.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 3 verify ecmp group are removed,until all nexthop's down
+- name: shutdown portchannel0002 from ecmp
+  shell: config interface shutdown PortChannel0002 
+  become: yes
+
+- name: shutdown portchannel0003 from ecmp
+  shell: config interface shutdown PortChannel0003 
+  become: yes
+
+# Sleep 5 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=15
+
+# Judging ecmp group are removed after shutdown 3 portchannel (4 portchannels in ecmp group)
+- name: Check ROUTE_TABLE of APPL_DB
+  shell: redis-cli -n 0 hget "ROUTE_TABLE:0.0.0.0/0" nexthop
+  register: result
+  become: true
+
+- fail: msg="ecmp group are not removed."
+  when: result.stdout.split(',')|length != 1
+
+# verify traffic can be forwarded via this route  
+- name: Gernerate test ip address for host if
+  set_fact:
+    dut_peer_port: "{{ ip_addr_ecmp_info['dst_port_o'] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_1.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 4 continuous recover the rif verify the ecmp group will be create again
+- name: startup portchannel0001 to ecmp
+  shell: config interface startup PortChannel0001 
+  become: yes
+
+- name: startup portchannel0002 to ecmp
+  shell: config interface startup PortChannel0002 
+  become: yes
+
+- name: startup portchannel0003 to ecmp
+  shell: config interface startup PortChannel0003 
+  become: yes 
+
+# Sleep 35 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=50
+
+- name: Check ROUTE_TABLE of APPL_DB
+  shell: redis-cli -n 0 hget "ROUTE_TABLE:0.0.0.0/0" nexthop
+  register: result
+  become: true
+
+- fail: msg="ecmp group are not recovered."
+  when: result.stdout.split(',')|length != 4
+
+# verify traffic can be load-balance(src-ip) 
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_1.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 5 random startup and shutdown rif  100 times for triggering ecmp group member add/remove(rif and nembers all random)
+- name: Random startup and shutdown rif 100 times
+  include: roles/test/tasks/ecmp/up_down_rif_times.yml
+  with_sequence: start=1 end=100
+
+# Sleep 35 seconds wait for bgp route after down/up lag
+- name: Wait for bgp route after down/up lag
+  pause: seconds=60
+
+# verify traffic can be load-balance correctly(src-ip)
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_1.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+

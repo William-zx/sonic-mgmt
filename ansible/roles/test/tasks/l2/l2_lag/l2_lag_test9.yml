@@ -1,0 +1,196 @@
+
+- set_fact:
+    portchannel_id: 1
+    portchannel_name: PortChannel1
+    vlan_id: 1009
+    portchannel_member_list: [1,2,3,4]
+    orphan_port_index_list: [5,6,7,8]
+    pkt_num: 4000
+
+- set_fact: orphan_port_5="{{ item.dev }}"
+  when: item.port_index == '5'
+  with_items: vlan_ports_list
+
+- block:
+  - name: Generate PortChannel config for PTF
+    template: src=roles/test/templates/l2/l2_lag/l2_lag_ptf_portchannel_config_general.j2 dest=/tmp/PortChannel{{ portchannel_id }}.conf
+    connection: local
+
+  - name: Copy PortChanenl config files to the PTF host
+    copy: src=/tmp/PortChannel{{ portchannel_id }}.conf dest=/tmp/PortChannel{{ portchannel_id }}.conf
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Copy ptf init script to {{ ptf_host }}.
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_lag/assist/l2_lag_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Init portchannel on ptf
+    shell: /tmp/l2_lag_ptf.sh startup_portchannel_general
+    become: true
+    delegate_to: "{{ ptf_host }}" 
+
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Create {{portchannel_name}}
+    shell: config portchannel add {{ portchannel_name }}
+    become: true
+
+  - name: Add {{portchannel_name}} to Vlan{{vlan_id}}
+    shell: config vlan member add {{ vlan_id }} {{ portchannel_name }}
+    become: true
+  
+  - name: Add orphan ports to Vlan{{vlan_id}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_port_to_vlan.yml
+    with_items: "{{ orphan_port_index_list }}"
+
+  - name: Add members to {{portchannel_name}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items:  "{{ portchannel_member_list }}"
+
+  - name: Testcase9_step1 Forward 4000 pkts with mac changes through {{portchannel_name}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case9'
+          - test_step='step1'
+          - test_pkt_num=\"{{ pkt_num }}\"
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ orphan_port_index_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase9_step1 Forward 4000 pkts with mac changes through portchannel\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test9_step1.log"
+
+#  - shell: show interfaces counters|sed 's;B/s;;'|grep "${member} "|awk '{print $9}'
+#    become: true
+#    register: result
+
+#  - name: verify orphan port5 tx value
+#    assert: { that: "result.stdout == {{pkt_num}}"}
+
+#  - shell: show mac
+#    become: true
+#    register: result
+  
+#  - fail: msg= "{{ mac learning error on portchannel! }}"
+#    when: result.stdout.find("Total number of entries {{pkt_num}}") == -1
+
+#  - shell: show mac|grep " 1 "|awk '{print $3}'
+#    become: true
+#    register: result
+    
+#  - set_fact: mac_entry="{{ result.stdout }}"
+
+#  - name: Testcase9_step2 Verify that traffic forward according to fdb
+#    include: roles/test/tasks/ptf_runner.yml
+#    vars:
+#        ptf_test_name: l2_lag test
+#        ptf_test_dir: ptftests
+#        ptf_test_path: l2_lag.L2LagTest
+#        ptf_platform_dir: ptftests
+#        ptf_platform: remote
+#        ptf_test_params:
+#          - testbed_type=\"{{ testbed_type }}\"
+#          - test_case='case9'
+#          - test_step='step2'
+#          - test_pkt_num=\"{{ pkt_num }}\"
+#          - test_member_list1=\"{{ portchannel_member_list }}\" 
+#          - test_member_list2=\"{{ orphan_port_index_list }}\"
+#          - test_tag_vid=0
+#          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+#          - test_dut_mac1='0'
+#          - test_dut_mac2='0'
+#          - test_ptf_mac1=\"{{ mac_entry }}\"
+#          - test_ptf_mac2='0'
+#          - test_ip1='0'
+#          - test_ip2='0'
+#          - test_case_str=\"Testcase9_step2 Verify traffic forward according to fdb\"
+#        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test9_step2.log"
+
+  - name: del all mac entry
+    shell: sonic-clear fdb all
+    become: true
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - fail: msg="{{ delete all fdb entry failed! }}"
+#    when: result.stdout.find("Total number of entries 0") == -1
+
+  - name: Testcase9_step3 Verify that unicast pkt forwarding floods to all ports in Vlan{{vlan_id}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_lag test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_lag.L2LagTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case='case9'
+          - test_step='step3'
+          - test_pkt_num=\"{{ pkt_num }}\"
+          - test_member_list1=\"{{ portchannel_member_list }}\" 
+          - test_member_list2=\"{{ orphan_port_index_list }}\"
+          - test_tag_vid=0
+          - vlan_ports_list=\"{{ vlan_ports_list }}\"
+          - test_dut_mac1='0'
+          - test_dut_mac2='0'
+          - test_ptf_mac1='0'
+          - test_ptf_mac2='0'
+          - test_ip1='0'
+          - test_ip2='0'
+          - test_case_str=\"Testcase9_step3 Verify that unicast pkt forwarding floods to all ports in vlan\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test9_step3.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_lag_test9']}}"
+
+  always:
+    - name: Del portchannel on ptf
+      shell: /tmp/l2_lag_ptf.sh delete_portchannel_general
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del member from {{portchannel_name}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_member.yml
+      with_items:  "{{ portchannel_member_list }}"
+
+    - name: Del {{portchannel_name}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+    
+    - name: Del Orphan ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_port_from_vlan.yml
+      with_items: "{{ orphan_port_index_list }}"
+
+    - name: Del {{portchannel_name}}
+      shell: config portchannel del {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+
+    - name: Del Vlan{{vlan_id}} 
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+

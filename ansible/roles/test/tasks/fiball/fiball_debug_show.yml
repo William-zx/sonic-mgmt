@@ -1,0 +1,35 @@
+- name: show dut arp table
+  shell: show arp
+  become: yes
+  failed_when: false
+  when: "'show dut arp' in action_list "
+
+- name: show ptf arp table
+  shell: ip neigh show
+  become: yes
+  failed_when: false
+  when: "'show ptf arp' in action_list "
+
+- name: show neigh in APPL_DB
+  shell: redis-cli -n 0 keys "NEIGH_TABLE*"
+  become: yes
+  failed_when: false
+  when: "'show appl_db neigh' in action_list "
+
+- name: show dut ip addr
+  shell: show ip interfaces
+  become: yes
+  failed_when: false
+  when: "'show dut ip addr' in action_list"
+
+- name: show dut ip addr
+  shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+  become: yes
+  failed_when: false
+  when: "'show dut npx_diag' in action_list"
+
+- name: show ptf ip addr
+  shell: ip addr show
+  delegate_to: "{{ ptf_host }}"      
+  failed_when: false
+  when: "'show ptf ip addr' in action_list"

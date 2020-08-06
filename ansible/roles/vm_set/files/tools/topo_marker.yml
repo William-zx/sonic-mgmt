@@ -1,0 +1,46 @@
+- hosts: sonic
+  gather_facts: no
+  pre_tasks:
+    - fail: 
+        msg: variable action should be defined!!
+      when: action is not defined
+    - fail:
+        msg: topo is invalid!!
+      when: action != 'get' and topo == ''
+
+  tasks:
+    - set_fact:
+        skip: "{{ remove_sonic_vm is defined and remove_sonic_vm|bool == true }}"
+        topo_marker_path: /etc/sonic/topo_marker
+
+    - block:
+        - name: Try to get dut currently connected topo
+          shell: cat {{ topo_marker_path }} || true
+          become: yes
+          register: out
+
+        - debug: var=out.stdout
+
+      when: not skip and action is defined and action == 'get'
+    
+    - block:
+        - name: Add log for connected topo {{topo}}
+          shell: logger -p NOTICE {{inventory_hostname}} connected to topo {{topo}} !
+        
+        - name: Create marker for connected topo {{topo}}
+          shell: echo {{ topo }} > {{ topo_marker_path }}
+          become: yes
+
+      when: not skip and action is defined and action == 'add'
+    
+    - block:
+        - name: Add log for disconnect topo {{topo}}
+          shell: logger -p NOTICE {{inventory_hostname}} disconnected from topo {{topo}} !
+        
+        - name: Remove marker for disconnected topo
+          file: 
+            dest: "{{ topo_marker_path }}"
+            state: absent
+          become: yes
+          
+      when: not skip and action is defined and action == 'remove'

@@ -1,0 +1,153 @@
+
+- set_fact:
+    vlan_id_list: [2,15,33,100,1101]
+    vlan_member_index_list: [1,2,3]
+    ptf_mac1: 00:00:00:00:33:33
+    diff_vid: 2000
+
+- block:
+  - name: clear fdb
+    shell: fdbclear
+    become: true
+
+  - name: create Vlan{{vlan_id_list}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_create_vlan.yml
+    with_items: "{{ vlan_id_list }}"
+
+  - set_fact: vlan_id={{vlan_id_list[0]}}
+
+  - name: add members to vlan{{vlan_id}} with mode tagged
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan.yml
+    with_items: "{{ vlan_member_index_list }}"
+
+  - set_fact: vlan_id={{vlan_id_list[1]}}
+
+  - name: add members to vlan{{vlan_id}} with mode tagged
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan.yml
+    with_items: "{{ vlan_member_index_list }}"    
+
+  - set_fact: vlan_id={{vlan_id_list[2]}}
+
+  - name: add members to vlan{{vlan_id}} with mode tagged
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan.yml
+    with_items: "{{ vlan_member_index_list }}"
+
+  - set_fact: vlan_id={{vlan_id_list[3]}}
+
+  - name: add members to vlan{{vlan_id}} with mode tagged
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan.yml
+    with_items: "{{ vlan_member_index_list }}"
+
+  - set_fact: vlan_id={{vlan_id_list[4]}}
+
+  - name: add members to vlan{{vlan_id}} with mode tagged
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_port_to_vlan.yml
+    with_items: "{{ vlan_member_index_list }}"
+
+  - name: Testcase3 verify l2 traffic with tagged will be forwarded in corresponding vlan
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case3\"
+          - test_step=\"step1\"
+          - test_member_list1=\"{{ vlan_member_index_list }}\"
+          - test_member_list2=\"{{ vlan_id_list }}\"
+          - test_vid=\"0\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"0\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase3 verify l2 traffic with tagged will be forwarded in corresponding vlan\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test3_step1.log"
+
+ # - shell: show mac
+ #   become: true 
+ #   register: result
+
+ # - fail: msg="{{ptf_mac1}} not learning in vlan{{vlan_id_list[0]}}, error!"
+ #   when: result.stdout.find(" {{vlan_id_list[0]}}  {{ptf_mac1}}") == -1
+
+ # - fail: msg="{{ptf_mac1}} not learning in vlan{{vlan_id_list[1]}}, error!"
+ #   when: result.stdout.find(" {{vlan_id_list[1]}}  {{ptf_mac1}}") == -1
+
+ # - fail: msg="{{ptf_mac1}} not learning in vlan{{vlan_id_list[2]}}, error!"
+ #   when: result.stdout.find(" {{vlan_id_list[2]}}  {{ptf_mac1}}") == -1
+
+ # - fail: msg="{{ptf_mac1}} not learning in vlan{{vlan_id_list[3]}}, error!"
+ #   when: result.stdout.find(" {{vlan_id_list[3]}}  {{ptf_mac1}}") == -1
+
+ # - fail: msg="{{ptf_mac1}} not learning in vlan{{vlan_id_list[4]}}, error!"
+ #   when: result.stdout.find(" {{vlan_id_list[4]}}  {{ptf_mac1}}") == -1
+
+  - name: Testcase3 verify the l2 traffic unlike vid tags can not be forwarded by the DUT
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case3\"
+          - test_step=\"step2\"
+          - test_member_list1=\"{{ vlan_member_index_list }}\"
+          - test_member_list2=\"{{ vlan_id_list }}\"
+          - test_vid=\"{{ diff_vid }}\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"0\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase3 verify the l2 traffic unlike vid tags can not be forwarded by the DUT\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test3_step2.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_vlan_case3']}}"
+
+  always:
+    - set_fact: vlan_id={{vlan_id_list[0]}}
+
+    - name: del members from vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_index_list }}"
+
+    - set_fact: vlan_id={{vlan_id_list[1]}}
+
+    - name: del members from vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_index_list }}"    
+
+    - set_fact: vlan_id={{vlan_id_list[2]}}
+
+    - name: del members from vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_index_list }}"
+
+    - set_fact: vlan_id={{vlan_id_list[3]}}
+
+    - name: del members from vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_index_list }}"
+
+    - set_fact: vlan_id={{vlan_id_list[4]}}
+
+    - name: del members from vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_port_from_vlan.yml
+      with_items: "{{ vlan_member_index_list }}"
+
+    - name: del Vlan{{vlan_id_list}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_vlan.yml
+      with_items: "{{ vlan_id_list }}"
+

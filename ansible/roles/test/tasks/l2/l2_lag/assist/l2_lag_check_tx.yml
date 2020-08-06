@@ -1,0 +1,16 @@
+- set_fact: port_index="{{item}}"
+
+- set_fact: member="{{ item.dev }}"
+  when: item.port_index == '{{port_index}}'
+  with_items: vlan_ports_list
+
+- debug: msg="portchannel_member={{member}}"
+
+- shell: show interfaces counters|sed 's;B/s;;'|grep "{{ member }} "|awk '{print $9}'
+  become: yes
+  register: result
+
+- debug: msg={{result.stdout}}
+
+- name: verify member rx value
+  assert: { that: "{{result.stdout}} > {{pkt_tx_min_each_port}} and {{result.stdout}} < {{pkt_tx_max_each_port}}"}

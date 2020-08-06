@@ -1,0 +1,183 @@
+# This is the l2_fdb.yml helper playbook, and in this 
+# playbook verify mac learning from lag member.
+
+- set_fact:
+    portchannel_id: 1
+    portchannel_name: PortChannel1
+    portchannel_member_index_list: [1,2,3,4]
+    assist_port_index_list: [6, 7, 8]
+    vlan_id: 210
+    mac1: 00:00:00:00:00:10
+
+- block:
+  - name: Generate portchannel config for ptf
+    template: src=l2/l2_fdb/l2_fdb_ptf_portchannel_config_test10.j2 dest=/tmp/{{ portchannel_name }}.conf
+    connection: local
+
+  - name: Copy portchannel config files to ptf host
+    copy: src=/tmp/{{ portchannel_name }}.conf dest=/tmp/{{ portchannel_name }}.conf
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Init portchannel on ptf
+    shell: /tmp/l2_fdb_ptf.sh startup_fdb_test10
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{vlan_id}}
+    become: true
+
+  - name: Create {{portchannel_name}}
+    shell: config portchannel add {{portchannel_name}}
+    become: true
+
+  - name: Add members to {{portchannel_name}}
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_lag_member.yml
+    with_items: portchannel_member_index_list
+
+  - name: Add {{portchannel_name}} to Vlan{{vlan_id}} with untagged mode
+    shell: config vlan member add {{vlan_id}} {{portchannel_name}} --untagged
+    become: true
+  
+  - name: Add assist port to Vlan{{vlan_id}} with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: assist_port_index_list
+
+  - name: Testcase10_step1 Send l2 traffic with {{mac1}} sources mac from member1 of {{portchannel_name}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case10\"
+          - test_step=\"step1\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ portchannel_member_index_list}}\"
+          - test_member_list2=\"{{assist_port_index_list}}\"
+          - test_mac1=\"{{mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase10_step1 Send l2 traffic with {{mac1}} sources mac from member1 of {{portchannel_name}}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test10_step1.log"  
+  
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - fail: msg= "{{ MAC learning failed! }}"
+#    when: result.stdout.find("{{mac1}}  {{portchannel_name}}") == -1
+
+  - name: Testcase10_step2 Send l2 traffic with {{mac1}} dest mac from assist port, and verify the traffic is forwarded from lag
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case10\"
+          - test_step=\"step2\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ portchannel_member_index_list}}\"
+          - test_member_list2=\"{{assist_port_index_list}}\"
+          - test_mac1=\"{{mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase10_step2 Send l2 traffic with {{mac1}} dest mac from assist port, and verify the traffic is forwarded from lag\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test10_step2.log"
+
+  - name: flush fdb
+    shell: sonic-clear fdb all
+    become: true
+
+  - name: Testcase10_step3 Send l2 traffic with {{mac1}} sources mac from member2 of {{portchannel_name}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case10\"
+          - test_step=\"step3\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ portchannel_member_index_list}}\"
+          - test_member_list2=\"{{assist_port_index_list}}\"
+          - test_mac1=\"{{mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase10_step3 Send l2 traffic with {{mac1}} sources mac from member2 of {{portchannel_name}}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test10_step3.log"  
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - fail: msg= "{{ MAC learning failed! }}"
+#    when: result.stdout.find("{{mac1}}  {{portchannel_name}}") == -1
+
+  - name: Testcase10_step4 Send l2 traffic with {{mac1}} dest mac from assist port, and verify the traffic is forwarded from lag
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case10\"
+          - test_step=\"step4\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ portchannel_member_index_list}}\"
+          - test_member_list2=\"{{assist_port_index_list}}\"
+          - test_mac1=\"{{mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase10_step4 Send l2 traffic with {{mac1}} dest mac from assist port, and verify the traffic is forwarded from lag\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test10_step4.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_fdb_case10']}}"
+
+  always:
+    - name: Del portchannel on ptf
+      shell: /tmp/l2_fdb_ptf.sh delete_fdb_test10
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del {{portchannel_name}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name }}
+      become: true
+      ignore_errors: true
+
+    - name: Del assist port from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: assist_port_index_list
+
+    - name: Del member from {{portchannel_name}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_lag_member.yml
+      with_items: portchannel_member_index_list
+
+    - name: Del {{portchannel_name}}
+      shell: config portchannel del {{portchannel_name}}
+      become: true
+      ignore_errors: true
+
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{vlan_id}}
+      become: true
+      ignore_errors: true
+

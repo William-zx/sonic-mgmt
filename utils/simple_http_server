@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+# Simple http server serving files relative to the given directory
+
+import SimpleHTTPServer
+import SocketServer
+import os
+import os.path
+import signal
+import argparse
+
+PORT = 5678
+IP = ''
+PID_FILE = '/var/run/simple_http_server.pid'
+
+def parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--dir', help='Serve directory')
+    parser.add_argument('-i', '--ip', help='Server ip')
+    parser.add_argument('-p', '--port', help='Server port', type=int)
+    parser.add_argument('-s', '--stop', help='stop server by pid', action='store_true')
+    return parser.parse_args()
+
+def stop():
+    if not os.path.exists(PID_FILE):
+        print "Not found pid file for simple_http_server!!"
+        exit(1)
+    with open(PID_FILE, 'r') as fh:
+        pid = int(fh.read())
+    os.remove(PID_FILE)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as err:
+        print str(err)
+        exit(1)
+    exit(0)
+
+def main():
+    options = parser()
+    if options.stop:
+        stop()
+    if options.dir:
+        os.chdir(options.dir)
+        
+    port = options.port or PORT
+    server_ip = options.ip or IP
+    Handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+    httpd = SocketServer.TCPServer((server_ip, port), Handler)
+    print "serving on {} port {}...".format(server_ip, PORT)
+    with open(PID_FILE, 'w') as fh:
+        fh.write(str(os.getpid()))
+
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        os.remove(PID_FILE)
+        exit(0)
+    
+if __name__=='__main__':
+    main()

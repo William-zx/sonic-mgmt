@@ -1,0 +1,125 @@
+# This is the l2_fdb.yml helper playbook, and in this 
+# playbook verify the configuration and deletion of 
+# static mac and data forwarding based on static mac 
+
+- set_fact:
+    vlan_id: 209
+    vlan_ports_list: [1,2,3,4,5]
+    static_mac: 00:00:00:00:00:08
+    static_port_index: 2
+    
+- set_fact: static_port="{{item.dev}}"
+  when: item.port_index == '{{static_port_index}}'
+  with_items: fdb_ports_list
+  
+- block:
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{vlan_id}}
+    become: true
+    
+  - name: Add ports to vlan with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: vlan_ports_list
+
+  - name: clear all fdb entry
+    shell: sonic-clear fdb all
+    become: true
+
+  - set_fact:
+      static_operation: 'SET'
+
+  - name: Generate config file for adding static fdb 
+    template: src=roles/test/templates/l2/l2_fdb/l2_fdb_config_static_fdb.j2
+              dest=/tmp/l2_fdb_config_static_fdb.json
+
+  - name: Copy config file to docker swss
+    shell: docker cp /tmp/l2_fdb_config_static_fdb.json swss:/
+    become: true
+
+  - name: Load config file for generating static fdb
+    shell: docker exec -i swss swssconfig /l2_fdb_config_static_fdb.json
+    become: true
+
+  - name: Testcase8_step1 Verify l2 trafic is forwarded via static fdb 
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case8\"
+          - test_step=\"step1\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"[{{static_port_index}}]\"
+          - test_mac1=\"{{static_mac}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase8_step1 Verify l2 trafic is forwarded via static fdb\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test8_step1.log"
+
+  - set_fact: 
+      static_operation: 'DEL'
+
+  - name: Generate config file for deleting static fdb 
+    template: src=roles/test/templates/l2/l2_fdb/l2_fdb_config_static_fdb.j2
+              dest=/tmp/l2_fdb_config_static_fdb.json
+
+  - name: Copy config file to docker swss
+    shell: docker cp /tmp/l2_fdb_config_static_fdb.json swss:/
+    become: true
+
+  - name: Load config file for deleting static fdb
+    shell: docker exec -i swss swssconfig /l2_fdb_config_static_fdb.json
+    become: true
+    
+  - name: Testcase8_step2 Verify l2 trafic will be broadcast in Vlan{{vlan_id}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case8\"
+          - test_step=\"step2\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"[{{static_port_index}}]\"
+          - test_mac1=\"{{static_mac}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase8_step2 Verify l2 trafic will be broadcast in Vlan{{vlan_id}}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test8_step2.log"    
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_fdb_case8']}}"
+    
+  always:
+    - set_fact: 
+       static_operation: 'DEL'
+
+    - name: Generate config file for deleting static fdb 
+      template: src=roles/test/templates/l2/l2_fdb/l2_fdb_config_static_fdb.j2
+                dest=/tmp/l2_fdb_config_static_fdb.json
+
+    - name: Copy config file to docker swss
+      shell: docker cp /tmp/l2_fdb_config_static_fdb.json swss:/
+      become: true
+
+    - name: Load config file for deleting static fdb
+      shell: docker exec -i swss swssconfig /l2_fdb_config_static_fdb.json
+      become: true
+
+    - name: Del ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: vlan_ports_list
+
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+

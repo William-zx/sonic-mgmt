@@ -1,0 +1,14 @@
+
+- name: Create Vlan{{item}}
+  shell: config vlan add {{ item }}
+  become: true
+  ignore_errors: true
+
+- shell: show vlan brief
+  become: true
+  register: result
+
+- fail: msg="Create vlan failed!"
+  when: result.stdout.find(" {{item}} ") == -1
+
+

@@ -1,0 +1,155 @@
+
+- set_fact:
+    portchannel_member_list1: [1]
+    portchannel_member_list2: [2]
+    portchannel_name_1: PortChannel1
+    portchannel_name_2: PortChannel2
+    dut_ip_1: 100.1.1.1
+    dut_ip_2: 100.2.1.1
+    ptf_ip_1: 100.1.1.2
+    ptf_ip_2: 100.2.1.2
+    dst_ip: 100.3.1.1
+    dst_net: 100.3.0.0
+    ptf_portchannel1_mac: 00:00:00:00:00:01
+    ptf_portchannel2_mac: 00:00:00:00:00:02
+
+- block: 
+  - name: Generate portchannel config for ptf
+    template: src=roles/test/templates/l2/l2_lag/l2_lag_ptf_portchannel_config_test14.j2 dest=/tmp/PortChannel{{ item }}.conf
+    connection: local
+    with_items: [1,2]
+
+  - name: Copy portchannel config files to ptf host
+    copy: src=/tmp/PortChannel{{ item }}.conf dest=/tmp/PortChannel{{ item }}.conf
+    delegate_to: "{{ ptf_host }}"
+    with_items: [1,2]
+
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_lag/assist/l2_lag_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Config portchannel ip on ptf
+    shell: /tmp/l2_lag_ptf.sh startup_portchannel_test14
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Create {{portchannel_name_1}}
+    shell: config portchannel add {{ portchannel_name_1 }}
+    become: true
+
+  - name: Create {{portchannel_name_2}}
+    shell: config portchannel add {{ portchannel_name_2 }}
+    become: true
+  
+  - set_fact: portchannel_name="{{portchannel_name_1}}"
+
+  - name: Add one port to {{portchannel_name_1}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items: "{{ portchannel_member_list1 }}"
+
+  - set_fact: portchannel_name="{{portchannel_name_2}}"
+
+  - name: Add one port to {{portchannel_name_2}}
+    include: roles/test/tasks/l2/l2_lag/assist/l2_lag_add_member.yml
+    with_items: "{{ portchannel_member_list2 }}"
+
+  - name: Config {{portchannel_name_1}} IP:{{dut_ip_1}}
+    shell: config interface ip add {{ portchannel_name_1 }} {{ dut_ip_1 }}/16
+    become: true
+
+  - name: Config {{portchannel_name_2}} IP:{{dut_ip_2}}
+    shell: config interface ip add {{ portchannel_name_2 }} {{ dut_ip_2 }}/16
+    become: true
+
+  - name: Config static route
+    shell: ip route add {{ dst_net }}/16 via {{ ptf_ip_2 }}
+    become: true
+
+  - name: Config static route on ptf
+    shell: /tmp/l2_lag_ptf.sh add_route_test14
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: ping ptf from dut
+    shell: ping -c 3 {{ ptf_ip_2 }}
+    become: true
+    ignore_errors: true
+
+  - name: Testcase14_step1 Verify l3 traffic can be forwarded according to configurable static routing
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+       ptf_test_name: l2_lag test
+       ptf_test_dir: ptftests
+       ptf_test_path: l2_lag.L2LagTest
+       ptf_platform_dir: ptftests
+       ptf_platform: remote
+       ptf_test_params:
+         - testbed_type=\"{{ testbed_type }}\"
+         - test_case=\"case14\"
+         - test_step=\"step1\"
+         - test_pkt_num=0
+         - test_member_list1=\"{{ portchannel_member_list1 }}\"
+         - test_member_list2=\"{{ portchannel_member_list2 }}\"
+         - test_tag_vid=0
+         - vlan_ports_list=\"{{ vlan_ports_list }}\"
+         - test_dut_mac1=\"{{ ansible_Ethernet0['macaddress'] }}\"
+         - test_dut_mac2=\"{{ ansible_Ethernet0['macaddress'] }}\"
+         - test_ptf_mac1=\"{{ ptf_portchannel1_mac }}\"
+         - test_ptf_mac2=\"{{ ptf_portchannel2_mac }}\" 
+         - test_ip1=\"{{ ptf_ip_1 }}\"
+         - test_ip2=\"{{ dst_ip }}\"
+         - test_case_str=\"Testcase14_step1 Verify l3 traffic can be forwarded according to configurable static routing\"
+       ptf_extra_options: "--relax --debug info --log-file /tmp/l2_lag_test14_step1.log"       
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_lag_case14']}}"
+  
+  always:
+    - name: Del static route on ptf
+      shell: /tmp/l2_lag_ptf.sh delete_route_test14
+      become: true
+      ignore_errors: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del portchannel ip on ptf
+      shell: /tmp/l2_lag_ptf.sh delete_portchannel_test14
+      become: true
+      ignore_errors: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del {{portchannel_name_1}} IP:{{dut_ip_1}}
+      shell: config interface ip remove {{ portchannel_name_1 }} {{ dut_ip_1 }}/24
+      become: true
+      ignore_errors: true
+    
+    - name: Del Vlan{{portchannel_name_2}} IP:{{dut_ip_2}}
+      shell: config interface ip remove {{ portchannel_name_2 }} {{ dut_ip_2 }}/24
+      become: true
+      ignore_errors: true
+ 
+    - set_fact: portchannel_name={{ portchannel_name_1 }}
+
+    - name: Del member from {{portchannel_name_1}} 
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_member.yml
+      with_items: "{{ portchannel_member_list1 }}"
+    
+    - set_fact: portchannel_name={{ portchannel_name_2 }}
+     
+    - name: Del member from {{portchannel_name_2}}
+      include: roles/test/tasks/l2/l2_lag/assist/l2_lag_del_member.yml
+      with_items: "{{ portchannel_member_list2 }}"
+
+    - name: Del {{portchannel_name_1}}
+      shell: config portchannel del {{ portchannel_name_1 }}
+      become: true
+      ignore_errors: true
+    
+    - name: Del {{portchannel_name_2}}
+      shell: config portchannel del {{ portchannel_name_2 }}
+      become: true
+      ignore_errors: true
+

@@ -1,0 +1,102 @@
+# Test Case 5 
+
+# Generate and apply the link-local ipv6 configuration on the switch
+- name: Generate ip addr configuration
+  template: 
+    src: "roles/test/tasks/router_if/ip_addr.j2"
+    dest: "/tmp/router_if/ip_addr.json"
+  vars:
+    op_cmd: "add"
+    ip_addrs: "{{ ip_addr_info['v6']['link'] }}"
+
+- name: Apply the ip configuration 1
+  vars:
+    command_to_run: "config load -y /tmp/router_if/ip_addr.json"
+    errors_expected: false
+  include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+# use second ip addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ip address for host if
+  set_fact:
+    host_ip_addr_list: "{{ ip_addr_info['v6']['link'] | map('ipaddr', 2) | list }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ item }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ host_ip_addr_list }}"
+
+# Donot know why need to wait for a some time after add ip address
+# Without this pausing, ping6 will complains "connect: Cannot assign requested address"
+- name: Waiting for sometimes
+  pause: seconds=5
+
+- name: Execute ping from host to switch to validate all ip addresses
+  shell: ping6 {{ item|ipaddr('address') }} -c 3 -I eth{{ dut_if_peer_port }} -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ ip_addr_info['v6']['link'] }}"
+
+# Step 2 generate and apply the unique-local ipv6 configuration on the switch
+- name: Generate ip addr configuration
+  template: 
+    src: "roles/test/tasks/router_if/ip_addr.j2"
+    dest: "/tmp/router_if/ip_addr.json"
+  vars:
+    op_cmd: "add"
+    ip_addrs: "{{ ip_addr_info['v6']['unique'] }}"
+
+- name: Apply the ipv6 unique addresses configuration
+  vars:
+    command_to_run: "config load -y /tmp/router_if/ip_addr.json"
+    errors_expected: false
+  include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+# use second ip addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ip address for host if
+  set_fact:
+    host_ip_addr_list: "{{ ip_addr_info['v6']['unique'] | map('ipaddr', 2) | list }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ item }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ host_ip_addr_list }}"
+
+# Donot know why need to wait for a some time after add ip address
+# Without this pausing, ping6 will complains "connect: Cannot assign requested address"
+- name: Waiting for sometimes
+  pause: seconds=5
+
+- name: Execute ping from host to switch to validate all ip addresses
+  shell: ping6 {{ item|ipaddr('address') }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ ip_addr_info['v6']['unique'] }}"
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Router interface Test
+        ptf_test_dir: ptftests
+        ptf_test_path: router_if_test.RifTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port={{ dut_if_peer_port }}
+          - unexpected_ip_addr_list=\"{{unexpected_ip_addr_list}}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/routerif.RifTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"

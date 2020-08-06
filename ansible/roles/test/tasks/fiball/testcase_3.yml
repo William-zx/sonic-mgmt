@@ -1,0 +1,124 @@
+# Test Case 3   Verify Connected route add/remove
+
+# Step1
+- name: add multiple ip on dut rif
+  shell: config interface ip add {{ dut_if_vlan }} {{ item }}
+  become: yes
+  with_items:
+    - "{{ ip_addr_info }}"
+
+# Step2
+- name: Verify connected routes by dump from ROUTE_TABLE in APPL_DB
+  shell: redis-cli -n 0 keys "ROUTE_TABLE:{{ item|ipaddr('subnet') }}" | grep "{{ item|ipaddr('subnet') }}"
+  with_items:
+    - "{{ ip_addr_info }}"
+
+# Step 3 veirfy ip traffic via these routes will trap to cpu(no nexthop exists)  
+- name: Generate ptf test params
+  set_fact:
+    ingress_rif: "{{ dut_if_4 }}"
+    dst_ip_addr_list: "{{ ip_addr_info | ipaddr(2) | ipaddr('address') }}"
+    dst_port_list: "{{ [dut_if_vlan_peer_port_list[0]] }}"
+    src_port: "{{ dut_if_4_peer_port }}"
+  
+- name: Genterate tcpdump params
+  set_fact:    
+    dur_in_sec: 10
+    cap_file: "/tmp/testcase_3_{{ ingress_rif }}.pcap"
+    filter: "dst {% for addr in  dst_ip_addr_list %}{{ addr }} {% if not loop.last %}or{% endif %} {% endfor %}"
+
+- name: Start tcpdump to capture ptks from {{ ingress_rif }}
+  shell: tcpdump -G {{ dur_in_sec }} -W 1 -i {{ ingress_rif }} -s 0 -w {{ cap_file }}
+  async: "{{ dur_in_sec | int + 20 }}"
+  register: async_tcpdump
+  poll: 0
+  become: true
+    
+- name: Send ip traffic via these connected routes
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_3 step3
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_3.step3.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+- name: wait for capture finished
+  async_status: jid={{ async_tcpdump.ansible_job_id }}
+  register: async_poll
+  until: async_poll.finished is defined and async_poll.finished
+  retries: 6
+  delay: 5
+  become: true
+
+- name: get tcpdump result to cpu
+  shell: tcpdump -r {{ cap_file }} -en {{ filter }}
+  register: trap_to_cpu_result
+  become: true
+
+- fail: msg="All packets should trap to cpu."
+  when: trap_to_cpu_result.stdout_lines|length != 4
+
+# Step 4 remove ip addresses
+- name: delete multiple ip on rif
+  shell: config interface ip remove {{ dut_if_vlan }} {{ item }}
+  become: yes
+  with_items:
+    - "{{ ip_addr_info }}"
+
+# Step5
+- name: Verify connected routes are removed by dump from ROUTE_TABLE in APPL_DB
+  shell: '! (redis-cli -n 0 keys "ROUTE_TABLE:{{ item|ipaddr("subnet") }}" | grep "{{ item|ipaddr("subnet") }}")'
+  with_items:
+    - "{{ ip_addr_info }}"
+
+
+# Step6 verify ip traffic via these route will drop
+- name: start tcpdump
+  shell: tcpdump -G {{ dur_in_sec }} -W 1 -i {{ ingress_rif }} -s 0 -w {{ cap_file }}
+  async: "{{ dur_in_sec | int + 20 }}"
+  register: async_tcpdump
+  poll: 0
+  become: true
+
+- name: Send ip traffic via these connected routes
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_3 step6
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_3.step6.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+- name: wait for capture finished
+  async_status: jid={{ async_tcpdump.ansible_job_id }}
+  register: async_poll
+  until: async_poll.finished is defined and async_poll.finished
+  retries: 6
+  delay: 5
+  become: true
+
+- name: get tcpdump result to cpu
+  shell: tcpdump -r {{ cap_file }} -en {{filter}}
+  register: trap_to_cpu_result
+  become: true
+
+- fail: msg="Pkts should not trap to cpu."
+  when: trap_to_cpu_result.stdout_lines|length !=0
+

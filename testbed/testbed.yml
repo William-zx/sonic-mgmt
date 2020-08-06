@@ -1,0 +1,4 @@
+testbed:
+  "192.168.11.143":
+    tb_file: testbed_143.yml
+    platform: vskvm

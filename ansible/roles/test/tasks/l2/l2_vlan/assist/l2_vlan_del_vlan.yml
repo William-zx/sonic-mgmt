@@ -1,0 +1,14 @@
+
+- name: Del Vlan{{item}}
+  shell: config vlan del {{ item }}
+  become: true
+  ignore_errors: true
+
+- shell: show vlan brief
+  become: true
+  register: result
+
+- fail: msg="Del vlan failed!"
+  when: result.stdout.find(" {{item}} ") != -1
+
+

@@ -1,0 +1,10 @@
+enable
+configure
+config
+{% for key, value in ansible_interface_up_down_data_struct_facts[item]['nei_interfaces'].iteritems() %}
+    interface {{ value }}
+    no shutdown
+    exit
+{% endfor %}
+exit
+exit

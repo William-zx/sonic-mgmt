@@ -1,0 +1,55 @@
+# Test Case 6
+
+- name: clear arp table
+  shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+  become: yes
+
+# step 1 remove one ipv6 address
+- name: Generate ip addr configuration
+  template: 
+    src: "roles/test/tasks/router_if/ip_addr.j2"
+    dest: "/tmp/router_if/ip_addr.json"
+  vars:
+    op_cmd: "add"
+    ip_addrs: "{{ ip_addr_info['v6']['global'] }}"
+
+- name: Apply the ip configuration
+  vars:
+    command_to_run: "config load -y /tmp/router_if/ip_addr.json"
+    errors_expected: false
+  include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+# use second ip addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ip address for host if
+  set_fact:
+    host_ip_addr_list: "{{ ip_addr_info['v6']['global'] | map('ipaddr', 2) | list }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ item }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ host_ip_addr_list }}"
+
+- name: Pause for add ip addr enabled
+  pause: seconds=5
+
+- name: Execute ping from host to switch to validate all ip addresses
+  # shell: ping6 {{ item|ipaddr('address') }} -c 3 -I eth{{ dut_if_peer_port }} -i 0.2
+  shell: ping6 {{ item|ipaddr('address') }} -c 3 -I {{ item|ipaddr(2)|ipaddr('address') }} -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+  with_items:
+    "{{ ip_addr_info['v6']['global'] }}"  
+
+- name: Generate test parameters
+  set_fact: 
+    # random sequence of ip addresses
+    remove_ip_addr_list: "{{ ip_addr_info['v6']['global'] | shuffle }}"
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Remove ip address and verify it
+  include: roles/test/tasks/router_if/tc6_remove_ip_and_verify.yml
+  with_items: "{{ remove_ip_addr_list }}"
+

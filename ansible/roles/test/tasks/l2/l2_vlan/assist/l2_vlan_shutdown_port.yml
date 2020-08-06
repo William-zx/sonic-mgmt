@@ -1,0 +1,11 @@
+
+- set_fact: port_index="{{item}}"
+
+- set_fact: port_name="{{ item.dev }}"
+  when: item.port_index == '{{ port_index }}'
+  with_items: vlan_ports_list
+
+- name: shutdown {{port_name}}
+  shell: config interface shutdown {{ port_name }} 
+  become: true
+  ignore_errors: true

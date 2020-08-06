@@ -1,0 +1,13 @@
+ip_addr_route_info:
+    v4:       
+        - 30.1.1.1/24
+    v6:
+        global:
+            - 2011::1/64
+            - 2012::1/96
+            - 2013::1/126
+        unique:            
+            - fc32::3/96
+            
+        link:
+            - fe80::abcd:efff:fe00:1/64

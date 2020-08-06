@@ -1,0 +1,78 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook check dut interface admin status when    
+# load json file to change its status.
+- block:
+    - set_fact: admin_operation="down"
+
+    - name: Generate nessesary configuration to make {{ test_port }} admin up
+      template: src=roles/test/templates/l2/l2_port/l2_port_admin_updown_config.j2
+                dest=/tmp/l2_port_admin_down_config.json
+      become: true
+
+    - name: Apply the port down configuration
+      vars:
+        command_to_run: "config load -y /tmp/l2_port_admin_down_config.json"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $7}'
+      register: result
+      failed_when: result.stdout != "{{ admin_operation }}"
+
+    - name: Testcase1_step1 Verify {{ test_port }} can forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+            - except_receive="False"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test1_step1.log"
+
+    - set_fact: admin_operation="up"
+
+    - name: Generate nessesary configuration to make {{ test_port }} admin down
+      template: src=roles/test/templates/l2/l2_port/l2_port_admin_updown_config.j2
+                dest=/tmp/l2_port_admin_up_config.json
+      become: true
+
+    - name: Apply the port down configuration
+      vars:
+        command_to_run: "config load -y /tmp/l2_port_admin_up_config.json"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $7}'
+      register: result
+      failed_when: result.stdout != "{{ admin_operation }}"
+
+    - name: Testcase1_step2 Verify {{ test_port }} can not forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test1_step2.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case1']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+    
+  always:
+    - name: Startup {{ test_port }} by cli
+      shell: config interface startup {{ test_port }}
+      become: true
+      ignore_errors: true
+
+

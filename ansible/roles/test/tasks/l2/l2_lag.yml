@@ -1,0 +1,152 @@
+- fail: msg="Invalid testbed_type value '{{testbed_type}}'"
+  when: testbed_type not in [ 't0' ]
+
+- name: Check team is installed in ptf docker
+  shell: which teamdctl
+  register: out
+  failed_when: out.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+- set_fact:
+    failed_case: []
+
+- name: Generate vlan_port information
+  template: src=roles/test/templates/l2/l2_lag/l2_lag_vlan_port_info.j2
+            dest=/tmp/l2_lag_vlan_port_info.yml
+  connection: local
+
+- name: copy the test to ptf container
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ ptf_host }}"
+
+- name: Load vlan_port info from file
+  include_vars: '/tmp/l2_lag_vlan_port_info.yml'
+ 
+- debug: var=vlan_ports_list
+
+#######################################################################
+- name: Backup default config of dut
+  command: cp /etc/sonic/config_db.json /etc/sonic/config_db_lag.json
+  become: true
+  ignore_errors: true
+
+- shell: config vlan member add {{ item.vid }} {{ item.dev }} --untagged
+  become: true
+  ignore_errors: true
+  with_items: vlan_ports_list
+
+- name: Del all ports from vlan on DUT
+  shell: config vlan member del {{ item.vid }} {{item.dev}}
+  become: true
+  ignore_errors: true
+  with_items: vlan_ports_list
+  
+- name: Save current config to configdb of dut
+  command: config save -y
+  become: true
+  ignore_errors: true
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+######################################################################
+
+- name: Testcase1 verify adding multiple members to lag
+  include: l2/l2_lag/l2_lag_test1.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase2 verify creating multiple lags
+  include: l2/l2_lag/l2_lag_test2.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+#- name: Testcase3 verify status of lag
+#  include: l2/l2_lag/l2_lag_test3.yml
+
+- name: Testcase4 verify status of lag member
+  include: l2/l2_lag/l2_lag_test4.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase5 verify deleting lag as a member of vlan
+  include: l2/l2_lag/l2_lag_test5.yml
+
+- name: Testcase6 verify deleting lag as an interface
+  include: l2/l2_lag/l2_lag_test6.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase7 verify load balancing of source Mac changes
+  include: l2/l2_lag/l2_lag_test7.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase8 verify load balancing of source IP changes
+  include: l2/l2_lag/l2_lag_test8.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+  
+- name: Testcase9 verify fdb learning of lag
+  include: l2/l2_lag/l2_lag_test9.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase10 verify neigh learning when lag as a vlan member
+  include: l2/l2_lag/l2_lag_test10.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase11 verify arp learning when lag as a vlan member
+  include: l2/l2_lag/l2_lag_test11.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase12 verify neigh learning when lag as an interface
+  include: l2/l2_lag/l2_lag_test12.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase13 verify arp learning when lag as an interface
+  include: l2/l2_lag/l2_lag_test13.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+  
+- name: Testcase14 verify l3 traffic can be forwarded via lag interface
+  include: l2/l2_lag/l2_lag_test14.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase15 verify lag added to multiple vlans with tagged mode
+  include: l2/l2_lag/l2_lag_test15.yml
+
+  ################################################  
+#- name: Add all ports to vlan on DUT
+#  shell: config vlan member add {{ item.vid }} {{ item.dev }} --untagged
+#  become: true
+#  ignore_errors: true
+#  with_items: vlan_ports_list
+
+- name: Recovery default config of dut
+  command: mv /etc/sonic/config_db_lag.json /etc/sonic/config_db.json
+  become: true
+  ignore_errors: true
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml  
+  #################################################  
+
+- fail: msg={{failed_case}}
+  when: "{{failed_case|length}} != 0"   

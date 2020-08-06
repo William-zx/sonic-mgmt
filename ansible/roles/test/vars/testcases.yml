@@ -1,0 +1,457 @@
+testcases:
+    acl:
+      filename: acltb.yml
+      topologies: [t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:
+            - /tmp/acl.*.log
+            - /tmp/syslog
+          ptf:
+            - /tmp/acltb_switch_info.txt
+
+    arp:
+      filename: arpall.yml
+      topologies: [ptf32, ptf64, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/arptest.*.log
+            - /tmp/arptest.*.pcap
+
+    bgp_fact:
+      filename: bgp_fact.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    bgp_gr_helper:
+      filename: bgp_gr_helper.yml
+      topologies: [t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+
+    bgp_multipath_relax:
+      filename: bgp_multipath_relax.yml
+      topologies: [t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      vir_platform: [vskvm]
+
+    bgp_speaker:
+      filename: bgp_speaker.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          testbed_type:
+          mtu:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/bgp_speaker_test.FibTest.log
+            - /tmp/bgp_speaker_test.FibTest.pcap
+
+    config:
+        filename: config.yml
+        topologies: [t1-lag, t1-64-lag, t0, t0-64, t0-116, t1-9-lag]
+        vir_platform: [vskvm]
+
+    continuous_reboot:
+      filename: continuous_reboot.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+      sleep_for_reboot: 240
+
+    copp:
+      filename: copp.yml
+      topologies: [ptf32, ptf64, t1, t1-6]
+      required_vars:
+          ptf_host:
+      extra_cmd_args: "nn_target_interface=Ethernet3"
+
+    decap:
+      filename: decap.yml
+      topologies: [t1, t1-lag, t1-64-lag, t0, t0-52, t0-56, t0-64, t0-116, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+          dscp_mode:
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/decap.*.log
+            - /tmp/decap.*.pcap
+
+    dhcp_relay:
+      filename: dhcp_relay.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+      vir_platform: [vskvm]
+
+    ecn_wred:
+      filename: ecn_wred.yml
+      topologies: [t0, t1, t1-lag, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+      sudo: True
+
+    everflow_testbed:
+      filename: everflow_testbed.yml
+      topologies: [t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:
+            - /tmp/ansible-loganalyzer-results/everflow_testbed.*
+            - /tmp/syslog
+            - /tmp/summary.loganalysis.log
+            - /tmp/result.loganalysis.log
+          ptf:
+      sudo: True
+
+    fast-reboot:
+      filename: fast-reboot.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          vm_hosts:
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/fast-reboot.log
+      sleep_for_reboot: 240
+
+    warm-reboot:
+      filename: warm-reboot.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          vm_hosts:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/warm-reboot.log
+      sleep_for_reboot: 240
+
+    warm-reboot-sad:
+      filename: warm-reboot-sad.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          vm_hosts:
+      sleep_for_reboot: 240
+
+    warm-reboot-multi-sad:
+      filename: warm-reboot-multi-sad.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          vm_hosts:
+      sleep_for_reboot: 240
+
+    warm-reboot-multi-sad-inboot:
+      filename: warm-reboot-multi-sad-inboot.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t0-56]
+      required_vars:
+          ptf_host:
+          vm_hosts:
+
+    fib:
+      filename: simple-fib.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+          mtu: 1500
+
+    hash:
+      filename: hash.yml
+      topologies: [t0, t0-16, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/fib_test.FibTest.*.log
+            - /tmp/fib_test.FibTest.*.pcap
+
+    warm-reboot-fib:
+      filename: warm-reboot-fib.yml
+      topologies: [t0, t0-16, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+          mtu: 1500
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/fib_test.FibTest.*.log
+            - /tmp/fib_test.FibTest.*.pcap
+      sleep_for_reboot: 240
+
+    fdb:
+      filename: fdb.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/fdb_test.FdbTest.*.log
+            - /tmp/fdb_test.FdbTest.*.pcap
+
+    fdb_mac_expire:
+      filename: fdb_mac_expire.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116]
+      required_vars:
+          fdb_aging_time:
+          ptf_host:
+          testbed_type:
+
+    dir_bcast:
+      filename: dir_bcast.yml
+      topologies: [t0, t0-16, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/dir_bcast.BcastTest.*.log
+            - /tmp/dir_bcast.BcastTest.*.pcap
+
+    lag_2:
+      filename: lag_2.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1-lag, t1-64-lag, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+
+    lldp:
+      filename: lldp.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-116, t0-64-32, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    link_flap:
+      filename: link_flap.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    continuous_link_flap:
+      filename: continuous_link_flap.yml
+      topologies: [t0, t0-16, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      archive_logs_flag: False
+
+    mem_check:
+      filename: mem_check.yml
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    mtu:
+      filename: mtu.yml
+      topologies: [t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+          mtu:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/mtu_test.MtuTest.*.log
+            - /tmp/mtu_test.MtuTest.*.pcap
+
+    neighbour:
+      filename: neighbour-mac.yml
+      topologies: [ptf32, ptf64]
+      required_vars:
+          ptf_host:
+      vir_platform: [vskvm]
+
+    neighbour_mac_noptf:
+      filename: neighbour-mac-noptf.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+            - /tmp/ansible-loganalyzer-results/everflow_testbed.*
+            - /tmp/syslog
+            - /tmp/summary.loganalysis.log
+            - /tmp/result.loganalysis.log
+          ptf:
+
+    ntp:
+      filename: ntp.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    # pfc_wd:
+    #   filename: pfc_wd.yml
+    #   topologies: [t0, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+    #   archive_logs:
+    #       dut:
+    #         - /home/admin/pfc_wd_tests/results/pfc_wd.*/
+    #         - /tmp/syslog
+    #       ptf:
+
+    portstat:
+      filename: portstat.yml
+      topologies: [t0, t0-16, t0-56, t0-64, t0-116, t1, t1-6]
+
+    port_toggle:
+      filename: port_toggle.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    # qos:
+    #   filename: qos.yml
+    #   topologies: [ptf32, ptf64]
+    
+    qos_sai:
+      filename: qos_sai.yml
+      topologies: [ptf32, ptf64, t0, t0-64, t0-116]
+      extra_cmd_args: "ptf_portmap=roles/test/files/mtk/default_interface_to_front_map.ini"
+
+    reboot:
+      filename: reboot.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+      sleep_for_reboot: 240
+
+    repeat_harness:
+      filename: repeat_harness.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    restart_swss:
+      filename: run_config_cleanup.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    restart_swss_service:
+      filename: restart_swss.yml
+      topologies: [t0, t0-16, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    restart_syncd:
+      filename: restart_syncd.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    sensors:
+      filename: sensors_check.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+
+    service_acl:
+      filename: service_acl.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    snmp:
+      filename: snmp.yml
+      topologies: [t0, t0-52, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [VSKVM]
+
+    syslog:
+      filename: syslog.yml
+      topologies: [t0, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, ptf32, ptf64, t1-6, t1-9-lag]
+      vir_platform: [vskvm]
+
+    vlan:
+      filename: vlantb.yml
+      topologies: [t0, t0-16, t0-116]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/vlan_test.log
+            - /tmp/vlan_test.pcap
+
+    crm:
+      filename: crm.yml
+      topologies: [t1, t1-lag, t0, t0-52, t0-56, t0-64, t0-116, t1-6, t1-9-lag]
+      archive_logs:
+          dut:
+            - /tmp/syslog
+            - /tmp/summary.loganalysis.*.log
+            - /tmp/result.loganalysis.*.log
+          ptf:
+
+    dip_sip:
+      filename: dip_sip.yml
+      topologies: [t0, t0-16, t0-56, t0-64, t0-64-32, t0-116, t1, t1-lag, t1-64-lag, t1-6, t1-9-lag]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      vir_platform: [vskvm]
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/dip_sip.DipSipTest.*.log
+            - /tmp/dip_sip.DipSipTest.*.pcap
+
+    vxlan_decap:
+      filename: vxlan-decap.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+      reboot_after_test: True
+
+    wr_arp:
+      filename: wr_arp.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+
+    vnet_vxlan:
+      filename: vnet_vxlan.yml
+      vtestbed_compatible: no
+      topologies: [t0, t0-16, t0-52, t0-56, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+      archive_logs:
+          dut:
+          ptf:
+            - /tmp/vnet_test.log
+            - /tmp/vnet_test.pcap
+      reboot_after_test: True
+
+    # pfc_asym:
+    #   filename: pfc_asym.yml
+    #   topologies: [t0]
+    #   archive_logs:
+    #       dut:
+    #       ptf:
+    #         - /tmp/pfc_asym.PfcAsymOffTxTest.log
+    #         - /tmp/pfc_asym.PfcAsymOffTxTest.pcap
+
+    warm_reboot_vnet:
+      filename: warm-reboot-vnet.yml
+      topologies: [t0, t0-64, t0-64-32, t0-116]
+      required_vars:
+          ptf_host:
+
+    iface_mode:
+      filename: iface_naming_mode.yml
+      topologies: [t0, t0-16, t0-64, t0-64-32, t0-116, t1, ptf32, ptf64, t1-6]
+      required_vars:
+          testbed_type:
+
+    # read_mac:
+    #   filename: read_mac_metadata.yml
+    #   topologies: [t0, t1, t1-lag, t1-6, t1-9-lag]

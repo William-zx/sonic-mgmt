@@ -1,0 +1,162 @@
+# Test Case 4   Verify mac/port change of arp
+
+- name: clear arp table
+  shell: sonic-clear arp
+  become: yes
+
+- name: Generate ip addr configuration
+  template: 
+    src: "roles/test/tasks/arp/ip_addr.j2"
+    dest: "/tmp/ip_addr.json"
+  vars:
+    op_cmd: "add"
+    ip_addrs: "{{ [dut_ip_addr_and_mask] }}"
+
+- name: Apply the ip configuration 1
+  vars:
+    command_to_run: "config load -y /tmp/ip_addr.json"
+    errors_expected: false
+  include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+- name: Gernerate test ip address for ptf
+  set_fact:
+    dut_ip_addr: "{{ dut_ip_addr_and_mask | ipaddr('address')}}"
+    host_ip_addr_and_mask: "{{ dut_ip_addr_and_mask | ipaddr(2) }}"
+    host_mac: "00:00:00:22:22:22"
+
+- set_fact:
+    host_ip_addr: "{{host_ip_addr_and_mask.split('/')[0]}}"
+    host_ip_mask: "{{host_ip_addr_and_mask.split('/')[1]}}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ host_ip_addr_and_mask }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+# ping for tirgger dyanmic arp resolve
+- name: Execute ping from host to switch to trigger arp resolve
+  shell: ping {{ dut_ip_addr }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# verify ip traffic can be forwarded via this route
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: verify ip traffic can be forwarded via this route
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ARP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: arp_test.ArpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+          - dst_port={{ dut_if_peer_port }}
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/arp.ArpTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log" 
+    
+# Step 2 change arp mac of route's nexthop
+- name: change mac of host if
+  shell: ip link set dev eth{{ dut_if_peer_port }} address {{host_mac}}
+  delegate_to: "{{ ptf_host }}"
+
+- name: flush arp entry on ptf
+  shell: ip -s -s neigh flush all
+  delegate_to: "{{ ptf_host }}"
+
+# ping for tirgger dyanmic arp resolve again
+- name: Execute ping from host to dut to trigger arp resolve
+  shell: ping {{ dut_ip_addr }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# verify mac of arp entry is changed
+- name: Use shell to show arp on dut_if
+  shell: show arp {{host_ip_addr}}
+  register: result
+  become: true
+
+- fail: msg="arp mac not changed."
+  when: host_mac not in result.stdout
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: ARP Test
+    ptf_test_dir: ptftests
+    ptf_test_path: arp_test.ArpTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=True
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - expected_dst_mac=\"{{ host_mac }}\"
+      - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/arp.ArpTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+  
+# Step 3 vlan interface only:
+# - send arp from another vlan member port
+# - verify mac of arp sourcr is leanrd from new comming vlan member port
+# - verify ip traffic can be forwarded to the correct vlan member port  
+- block:
+  - name: Flush ip address on host if
+    shell: ip addr flush dev eth{{ dut_if_peer_port }}
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Flush neigh on host if
+    shell: ip -s -s neigh flush all
+    delegate_to: "{{ ptf_host }}"
+    
+  - name: Add test IP address to host if2
+    shell: ip addr add {{ host_ip_addr_and_mask }} dev eth{{ dut_if_peer_port_2 }}
+    delegate_to: "{{ ptf_host }}"
+
+  #  ping to trigger dynamic arp resolve
+  - name: Execute ping from host to switch
+    shell: ping {{ dut_ip_addr }} -c 3 -i 0.2
+    register: pingrc
+    failed_when: pingrc.rc != 0
+    delegate_to: "{{ ptf_host }}"
+
+  # verify ip traffic can be forwarded via this arp
+  # Choose the last lag interface for ip forwarding test with dut inteface.
+  - name: Generate ptf test params
+    set_fact:
+      forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+      unexpected_ip_addr_list: []
+
+  - name: Run the test
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+          ptf_test_name: ARP Test
+          ptf_test_dir: ptftests
+          ptf_test_path: arp_test.ArpTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - verbose=True
+            - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+            - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+            - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+            - dst_port={{ dut_if_peer_port_2 }}
+            - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/arp.ArpTest.testcase_4.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+  when: rif == 'vlan'

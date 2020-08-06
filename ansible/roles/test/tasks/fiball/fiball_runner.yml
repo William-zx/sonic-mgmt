@@ -1,0 +1,272 @@
+# Test setup
+- name: Import all route info from file  
+  include_vars: "roles/test/tasks/fiball/route_info.yml"
+
+- name: Setup, remove all ip on host if
+  include: roles/test/tasks/fiball/fiball_teardown.yml
+  vars:
+    action_list:
+      - "del host if ip"
+
+
+- set_fact: case_name="fiball_testcase_1"
+- block:
+  - name: Run testcase 1 - Verify LPM
+    include: roles/test/tasks/fiball/testcase_1.yml
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "clear static route"
+        target_routes: "{{ static_routes.values() }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_2"
+- block:
+  - name: Run testcase 2 - Verify add route with 32-bit mask
+    include: roles/test/tasks/fiball/testcase_2.yml
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "clear static route"
+          - "del host if ip"
+        target_routes: "{{ static_routes32 }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_3"
+- block:
+  - name: Run testcase 3 - Verify Connected route add/remove
+    include: roles/test/tasks/fiball/testcase_3.yml
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "del dut if ip"
+          - "del host if ip"
+        target_dut_if_list: "{{[dut_if_vlan]}}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_4"
+- block:     
+  - name: Run testcase 4 - Verify route nexthop change(from not exist to exist)
+    include: roles/test/tasks/fiball/testcase_4.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show dut npx_diag"
+          - "show ptf ip addr"
+
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "del host if ip"
+          - "clear static route"
+        target_dut_if_list: "{{[dut_if_vlan]}}"
+        target_routes: "{{ [static_routes.prefix8] }}"
+  when: case_name in caseslist
+
+- set_fact: case_name="fiball_testcase_5 nexthop can not be delete when it referenced by route"
+- block:
+  # This step will be fail, because nexthop can not be delete when it referenced by route.
+  - name: Run testcase 5 - Verify route nexthop change(from exist to not exist)
+    include: roles/test/tasks/fiball/testcase_5.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show dut npx_diag"
+          - "show ptf ip addr"
+          - "show appl_db neigh"
+
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "del host if ip"
+          - "clear static route"
+        target_dut_if_list: "{{[dut_if_vlan]}}"
+        target_routes: "{{ [static_routes.prefix8] }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_6 vlan interface can not be delete"
+- block:
+  # This step will be fail, because vlan interface can not be delete by sonic command, ip link set command will cause something wrong.
+  - name: Run testcase 6 - Verify Route nexthop interface down/up
+    include: roles/test/tasks/fiball/testcase_6.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show dut npx_diag"
+          - "show ptf ip addr"
+
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "recover dut if"
+          - "del host if ip"
+          - "clear static route"
+        target_dut_if_list: "{{[dut_if_vlan]}}"
+        target_routes: "{{ [static_routes.prefix8] }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_7"
+- block:
+  - name: Run testcase 7 - Verify arp of route nexthop change its mac(vlan rif only)
+    include: roles/test/tasks/fiball/testcase_7.yml    
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "del host if ip"
+          - "clear static route"
+        target_routes: "{{ [static_routes.prefix8] }}"
+    
+    - name: Recover mac of host if
+      shell: ip link set dev eth{{ nh_interface_peer_port }} address {{nh_origin_mac}}
+      delegate_to: "{{ ptf_host }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_8"
+- block:
+  - name: Run testcase 8 - Verify arp of route nexthop change its incomming port(vlan rif only)
+    include: roles/test/tasks/fiball/testcase_8.yml    
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "del host if ip"
+          - "clear static route"
+        target_routes: "{{ [static_routes.prefix8] }}"
+  when: case_name in caseslist
+
+
+- set_fact: case_name="fiball_testcase_9"
+- block:
+  - name: Run testcase 9 - Verify Route nexthop intf change
+    include: roles/test/tasks/fiball/testcase_9.yml
+
+  rescue:
+    - name: debug show
+      include: roles/test/tasks/fiball/fiball_debug_show.yml
+      vars:
+        action_list:
+          - "show dut arp"
+          - "show dut ip addr"
+          - "show ptf ip addr"
+
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:  
+    - name: Teardown
+      include: roles/test/tasks/fiball/fiball_teardown.yml
+      vars:
+        action_list:
+          - "clear static route"
+        target_routes: "{{ [static_routes.prefix8] }}"
+  when: case_name in caseslist

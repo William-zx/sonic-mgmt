@@ -1,0 +1,78 @@
+testcases_nephos:
+    router_if:
+      filename: router_if.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:             
+          ptf:
+
+    arp_extend:
+      filename: arp.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:             
+          ptf:
+
+    neighbor-v6:
+      filename: neighbor-v6.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:             
+          ptf:
+
+    fiball:
+      filename: fiball.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:             
+          ptf:
+          
+    ecmp:
+      filename: ecmp.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+      archive_logs:
+          dut:             
+          ptf:
+
+    l2_port:
+      filename: l2/l2_port.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:   
+  
+    l2_fdb:
+      filename: l2/l2_fdb.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+
+    l2_lag:
+      filename: l2/l2_lag.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:
+    
+    l2_vlan:
+      filename: l2/l2_vlan.yml
+      topologies: [t0]
+      required_vars:
+          ptf_host:
+          testbed_type:

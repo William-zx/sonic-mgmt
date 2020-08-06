@@ -1,0 +1,34 @@
+- hosts: "{{ target }}"
+  gather_facts: no
+  become: yes
+  tasks:
+    - shell: |
+          python -c '
+          import glob
+          for i in glob.glob("{{ item }}"):
+          {{' '*4}}print i
+          '
+      with_items: "{{ file_patterns.split(',') }}"
+      register: ls_out
+      ignore_errors: true
+    
+    - set_fact:
+        files: "{{ files|default([]) }} + {{ item.stdout_lines}} "
+      with_items: "{{ ls_out.results }}"
+    
+    - debug: msg={{files}}
+
+    - name: Create local_dir
+      file:
+        path: "{{ local_dir }}"
+        state: directory
+
+    - fetch:
+        src: "{{ item }}"
+        dest: "{{ local_dir }}//{{ item | basename }}"
+        flat: yes
+      with_items: "{{ files }} "
+      ignore_errors: true
+
+
+  

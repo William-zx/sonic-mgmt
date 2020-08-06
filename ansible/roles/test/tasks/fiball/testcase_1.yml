@@ -1,0 +1,248 @@
+# Test Case 1   verify mechanism of route longest prefix matching
+
+# verify ip traffic should be forwarded via the default route
+- name: verify ip traffic should be forwarded via the default route
+  set_fact:
+    dst_ip_addr: "{{ dst_for_static_route }}"
+    src_port: "{{ dut_if_vlan_peer_port_list[0] }}"
+    dst_port_list: "{{ [dut_if_1_peer_port, dut_if_2_peer_port, dut_if_3_peer_port, dut_if_4_peer_port ]}}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step1
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [dst_ip_addr] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step1.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 2 add route 1 with prefix /8 and nexthop outgoing to rif2
+- set_fact:
+    static_route: "{{ static_routes.prefix8 }}"
+    dut_if_2_peer_ip: "{{ minigraph_portchannel_interfaces|selectattr('attachto', 'match', dut_if_2) | map(attribute='peer_addr') | ipv4 | first}}"
+
+- name: Add static ip route1
+  shell: vtysh -c "configure terminal" -c "ip route {{static_route}} {{dut_if_2_peer_ip}}"
+  become: yes 
+
+# verify route added successful
+- name: Use show to verify route add success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="add ip route {{ static_route }} fail."
+  when: static_route not in result.stdout
+
+# verify ip traffic should be forward via route 1
+- set_fact:
+    dst_port_list: "{{ [dut_if_2_peer_port] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step2
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step2.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 3 add route 2 with same prefix as route 1, but logger mask /16 and nexthop outgoing to rif3
+- set_fact:
+    static_route: "{{ static_routes.prefix16 }}"
+    dut_if_3_peer_ip: "{{ minigraph_portchannel_interfaces|selectattr('attachto', 'match', dut_if_3) | map(attribute='peer_addr') | ipv4 | first}}"
+
+
+- name: Add static ip route2
+  shell: vtysh -c "configure terminal" -c "ip route {{static_route}} {{dut_if_3_peer_ip}}"
+  become: yes 
+
+# verify route added successful
+- name: Use show to verify route add success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="add ip route {{ static_route }} fail."
+  when: static_route not in result.stdout
+
+# verify ip traffic should be forward via route 2
+- set_fact:
+    dst_port_list: "{{ [dut_if_3_peer_port] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step3
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step3.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 4 add route 3 with same prefix as route 2, but logger mask /24 and nexthop outgoing to rif4
+- set_fact:
+    static_route: "{{ static_routes.prefix24 }}"
+    dut_if_4_peer_ip: "{{ minigraph_portchannel_interfaces|selectattr('attachto', 'match', dut_if_4) | map(attribute='peer_addr') | ipv4 | first}}"
+
+- name: Add static ip route3
+  shell: vtysh -c "configure terminal" -c "ip route {{static_route}} {{dut_if_4_peer_ip}}"
+  become: yes 
+
+# verify route added successful
+- name: Use show to verify route add success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="add ip route {{ static_route }} fail."
+  when: static_route not in result.stdout
+
+# verify ip traffic should be forward via route 2
+- set_fact:
+    dst_port_list: "{{ [dut_if_4_peer_port] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step4
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step4.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 5 delete route 3
+- name: Del static ip route 3
+  shell: vtysh -c "configure terminal" -c "no ip route {{static_route}} {{dut_if_4_peer_ip}}"
+  become: yes 
+
+# verify route removed successful
+- name: Use show to verify route del success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="remove static route {{ static_route }} failed."
+  when: static_route in result.stdout
+
+# verify ip traffic matched route prefix should be forward via route 2
+- set_fact:
+    dst_port_list: "{{ [dut_if_3_peer_port] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step5
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step5.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 6 delete route 2
+- set_fact:
+    static_route: "{{ static_routes.prefix16 }}"
+
+- name: Del static ip route 2
+  shell: vtysh -c "configure terminal" -c "no ip route {{static_route}} {{dut_if_3_peer_ip}}"
+  become: yes 
+
+# verify route removed successful
+- name: Use show to verify route del success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="remove static route {{ static_route }} failed."
+  when: static_route in result.stdout
+
+# verify ip traffic matched route prefix should be forward via route 1
+- set_fact:
+    dst_port_list: "{{ [dut_if_2_peer_port] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step6
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step6.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 7 delete route 1
+- set_fact:
+    static_route: "{{ static_routes.prefix8 }}"
+
+- name: Del static ip route 1
+  shell: vtysh -c "configure terminal" -c "no ip route {{static_route}} {{dut_if_2_peer_ip}}"
+  become: yes 
+
+# verify route removed successful
+- name: Use show to verify route del success
+  shell: show ip route {{ static_route }}
+  register: result
+  become: true
+
+- fail: msg="remove static route {{ static_route }} failed."
+  when: static_route in result.stdout
+
+# verify ip traffic matched route prefix should be forward via default route
+- set_fact:
+    dst_port_list: "{{ [dut_if_1_peer_port, dut_if_2_peer_port, dut_if_3_peer_port, dut_if_4_peer_port ]}}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_1 step7
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ [ dst_ip_addr ] }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug debug --log-file /tmp/fiball.testcase_1.step7.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+

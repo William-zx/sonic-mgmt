@@ -1,0 +1,44 @@
+- name: Remove ip address on dut if
+  shell: config interface ip remove {{ dut_if }} {{ item }}
+  become: yes
+
+# After remove ip address from interface, whenever flush related arp entries,
+# kernel(up to 4.9) do not remove these entries from cache. Instead, 
+# it set them to be FAILED. If there comes in a arp request, this FAILED arp 
+# entry will become STALE state. The STALE entries are valid neighbors for SONiC, and will be go down to orch/ASIC.
+#
+# Hence, we use disable arp instead of flush to prevent this.
+- name: flush arp/neigh on dut if
+  shell: ip link set arp off dev {{ dut_if }} && ip link set arp on dev {{ dut_if }}
+  become: yes
+
+- name: Pause for delete ip addr
+  pause: seconds=5
+
+- name: Verify the removed ip can not ping success.
+  shell: ping {{item|ipaddr('address')}} -c 3 -i 0.2 -W2
+  register: pingrc
+  failed_when: pingrc.rc == 0
+  delegate_to: "{{ ptf_host }}"
+
+- name: Generate ptf test params
+  set_fact:
+    unexpected_ip_addr_list: "{{ unexpected_ip_addr_list + [item|ipaddr(2)|ipaddr('address')] }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: Router interface Test
+    ptf_test_dir: ptftests
+    ptf_test_path: router_if_test.RifTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=True
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/routerif.RifTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+  

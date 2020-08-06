@@ -1,0 +1,7 @@
+# used for check dut stable
+# now we only need to check the status of bgp
+# may add more check items if need.
+
+- hosts: sonic
+  tasks:
+    - include: ../../tasks/bgp_fact.yml

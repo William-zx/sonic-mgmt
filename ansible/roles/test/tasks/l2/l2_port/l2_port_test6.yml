@@ -1,0 +1,46 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook verify tx value of dut port.    
+
+- block:
+  - set_fact:
+      pkt_num: 2000
+      expect_tx: 2,000
+
+  - name: clear statistics infor
+    shell: portstat -c
+    become: true
+
+  - name: Testcase6_step1 Make {{ test_port }} send {{ pkt_num }} packets
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_port test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_port.L2PortTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+          - dst_port={{ test_port_index }}
+          - pkt_num={{ pkt_num }}
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test6_step1.log"
+
+  - pause: seconds=5
+
+  - shell: show interfaces counters|sed 's;B/s;;'|grep "{{ test_port }} "|awk '{print $9}'
+    become: true
+    register: result
+
+  - debug: msg={{ result.stdout }}
+
+  - fail: msg="{{ test_port }} tx value ERROR!"
+    when: result.stdout != "{{ pkt_num }}" and result.stdout != "{{ expect_tx }}"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case6']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+
+    - name: show interfaces counters check port counters
+        shell: show interfaces counters
+

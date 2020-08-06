@@ -1,0 +1,4 @@
+dut_ip_addr_and_mask: 30.1.1.1/8
+        
+route_prefix_list:       
+    - 40.1.1.1/24

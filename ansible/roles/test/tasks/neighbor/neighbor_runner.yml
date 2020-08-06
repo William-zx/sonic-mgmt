@@ -1,0 +1,193 @@
+# Test setup
+- block:
+  - set_fact:
+      case_name: "neighbor_testcase_1-{{ rif }}"
+
+  - name: Run testcase 1 - Verify dynamic neighbor learn and remove on interface port
+    include: roles/test/tasks/neighbor/testcase_1.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: show neighbor table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - name: flush all neigh entry on dut if
+      shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+      become: yes
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+
+- block:
+  - set_fact:
+      case_name: "neighbor_testcase_2-{{ rif }}"
+
+  - name: Run testcase 2 - Verify static neighbor feature
+    include: roles/test/tasks/neighbor/testcase_2.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: show neighbor table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - name: Remove static arp
+      shell: ip -s -s neigh del {{ host_ip_addr }} dev {{ dut_if }}
+      become: yes   
+      ignore_errors: true
+
+    - name: Del static mac whatever
+      shell: bridge fdb del {{ host_mac }} dev {{ dut_if_port }} vlan {{vid}} master
+      become: yes
+      ignore_errors: true
+      when: rif=='vlan'
+
+- block:
+  - set_fact:
+      case_name: "neighbor_testcase_3-{{ rif }}"
+
+  - name: Run testcase 3 - Verify add and flush neighbor entry of route's nexthop
+    include: roles/test/tasks/neighbor/testcase_3.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: show neighbor table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show ipv6 route
+      shell: show ipv6 route {{item}}
+      become: yes
+      with_items:
+        "{{ route_prefix_list }}"
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - name: flush all neigh entry on dut if
+      shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+      become: yes
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+    
+    - name: Del route entry
+      shell: vtysh -c "configure terminal" -c "no ipv6 route {{item}} {{host_ip_addr}}"
+      with_items:
+        "{{ route_prefix_list }}"
+
+- block:
+  - set_fact:
+      case_name: "neighbor_testcase_4-{{ rif }}"
+
+  - name: save mac of host if
+    shell: ip link show eth{{ dut_if_peer_port }} |  grep -o 'link/ether [^ ]*' | awk '{print $2}'
+    delegate_to: "{{ ptf_host }}"
+    register: out
+
+  - set_fact:
+      origin_mac: "{{out.stdout}}"
+
+  - name: Run testcase 4 - Verify mac/port change of neighbor
+    include: roles/test/tasks/neighbor/testcase_4.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: show neighbor table
+      shell: ip -6 neigh show
+      become: yes
+      ignore_errors: true
+
+    - name: show interface ip addr
+      shell: ip addr show {{ dut_if }}
+      become: yes
+      ignore_errors: true
+
+    - name: npx_diag l3 show host&&adjacency
+      shell: npx_diag l3 show host&&npx_diag l3 show adjacency
+      become: yes
+      ignore_errors: true
+
+    - name: flush all neigh entry on dut if
+      shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+      become: yes
+
+    - name: show ptf all interfaces ip addr
+      shell: ip addr show
+      delegate_to: "{{ ptf_host }}"
+      ignore_errors: true
+
+    - name: Flush all ip address on host rif
+      shell: ip addr flush dev eth{{ dut_if_peer_port }}
+      delegate_to: "{{ ptf_host }}"
+    
+    - name: Flush all ip address on host rif2
+      shell: ip addr flush dev eth{{ dut_if_peer_port_2 }}
+      delegate_to: "{{ ptf_host }}"  
+      when: rif == 'vlan'
+
+    - name: Recover mac of host if 
+      shell: ip link set dev eth{{ dut_if_peer_port }} address {{origin_mac}}
+      delegate_to: "{{ ptf_host }}"
+

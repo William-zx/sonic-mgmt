@@ -1,0 +1,31 @@
+- name: Del test IP address on dut if
+  shell: config interface ip remove {{ item.0 }} {{ item.1 }}
+  become: true
+  when: '"del dut if ip" in action_list'
+  with_nested:
+    - "{{ target_dut_if_list|default([]) }}"
+    - "{{ ip_addr_info|default([]) }}"
+  failed_when: false
+ 
+- name: Flush all ip address on host if
+  shell: for i in `ip link show | grep -o  'eth[0-9]\+'`; do ip address flush dev $i; done
+  delegate_to: "{{ ptf_host }}"
+  when: '"del host if ip" in action_list'
+  failed_when: false
+
+# clear static route
+- name: Clear static route on dut
+  shell: vtysh -c "show run"|grep "ip route {{item}}" | xargs -i docker exec -i bgp vtysh -c "config t" -c "no {}"
+  register: out
+  when: '"clear static route" in action_list'
+  with_items:
+    - "{{ target_routes|default([]) }}"
+  failed_when: false
+
+- name: Startup dut if
+  shell: ip link set {{item}} up
+  become: true
+  when: '"recover dut if" in action_list'
+  with_items:
+    - "{{ target_dut_if_list|default([]) }}"
+  failed_when: false

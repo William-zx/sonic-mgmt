@@ -1,0 +1,73 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook verify interface Rx oversize function.
+- name: clear statistics infor
+  shell: portstat -c
+  become: true
+
+- block:
+  - set_fact: mtu_config=1000
+
+  - set_fact: send_num=2000
+
+  - name: Generate nessesary configuration for changing mtu  
+    template: src=roles/test/templates/l2/l2_port/l2_port_mtu_config.j2
+             dest=/tmp/l2_port_mtu_config.json
+    become: true
+
+  - name: Apply the port mtu configuration
+    vars:
+      command_to_run: "config load -y /tmp/l2_port_mtu_config.json"
+      errors_expected: false
+    include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+  - set_fact: pkt_len=2000
+
+  - name: Testcase7_step1 Send {{ send_num }} {{ pkt_len }} length packets
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_port test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_port.L2PortTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - src_port={{ test_port_index }}
+          - dst_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+          - pkt_num={{ send_num }}
+          - pkt_len={{ pkt_len }}
+          - except_receive="False"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test7_step1.log --socket-recv-size 16384"
+
+  - pause: seconds=5
+ 
+  - shell: show interfaces counters |sed 's;B/s;;'|grep "{{ test_port }} "|awk '{print $8}'
+    become: true
+    register: result
+
+  - debug: msg={{ result.stdout }}
+
+  - fail: msg="{{ test_port }} RX_OVR value ERROR"
+    when: result.stdout != send_num
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case7: RX_OVR not support now']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+
+    - name: show interfaces counters check port counters
+      shell: show interfaces counters
+    
+  always:
+    - set_fact: mtu_config=9100
+
+    - name: Recover mtu default value  
+      template: src=roles/test/templates/l2/l2_port/l2_port_mtu_config.j2
+                dest=/etc/sonic/l2_port_mtu_config.json
+      become: true
+
+    - name: Load configuration to modify mtu
+      shell: config load -y /etc/sonic/l2_port_mtu_config.json
+      become: true
+      ignore_errors: true
+

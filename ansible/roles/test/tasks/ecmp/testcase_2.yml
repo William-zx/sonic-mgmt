@@ -1,0 +1,65 @@
+# Test Case 2  Verify the hash key works for ecmp(v4 and v6)
+# hash_type: src-port->1/dst-ip->2/inner-src-ip->3/inner-dst-ip->4/vlan-id->5/ip-proto->6/eth-type->7/src-ip->8/dst-port->9/src-mac->10/dst-mac->11/ingress-port->12
+# if before 201811 use ip addrs order to set
+#- block:
+#  - name: Add test IP address to dut if
+#    shell: sudo ip addr add {{ item }} dev {{ dut_if }}  
+#    with_items:
+#      "{{ ip_addr_info['v4'][3] }}"
+#  when: use_config_json == false
+
+# Step 0
+- name: Gernerate test ip address for host if
+  set_fact:
+    dut_peer_port_list: "{{ ip_addr_ecmp_info['dst_port'] }}"
+    host_ip_addr_list: "{{ ip_addr_ecmp_info['v4'] }}"
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    unexpected_ip_addr_list: []
+
+# Step 1 v4 ecmp hash key test        
+# verify traffic can be load-balance 
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=True
+          - hash_type=5
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+          - balancing_range="0.9"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 2 v6 ecmp hash key test        
+# verify traffic can be load-balance 
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: ECMP Test
+        ptf_test_dir: ptftests
+        ptf_test_path: ecmp_test.EcmpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - test_ipv4=False
+          - hash_type=1
+          - verbose=True
+          - src_port={{ dut_if_peer_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ host_ip_addr_list }}\"
+          - dst_port_list=\"{{ dut_peer_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+          - balancing_range="0.9"   
+        ptf_extra_options: "--relax --debug info --log-file /tmp/ecmp.EcmpTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+

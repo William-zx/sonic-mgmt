@@ -1,0 +1,71 @@
+# This is the l2_port.yml helper playbook. l2_port.yml passes dut interface
+# to this playbook and in this playbook verify port config interface 
+# shutdown/startup function.    
+- block:
+    - name: Shutdown {{ test_port }} by cli
+      vars:
+        command_to_run: "config interface shutdown {{ test_port }}"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $6}'
+      become: true
+      register: result
+
+    - fail: msg="{{ test_port }} oper status Error!"
+      when: result.stdout != "down"
+
+    - name: Testcase2_step1 Verify {{ test_port }} can forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+            - except_receive="False"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test2_step1.log"
+
+    - name: Startup {{ test_port }} by cli
+      vars:
+        command_to_run: "config interface startup {{ test_port }}"
+        errors_expected: false
+      include: roles/test/tasks/run_command_with_log_analyzer.yml
+
+    - shell: show interfaces status|grep "{{ test_port }} "|awk '{print $6}'
+      become: true
+      register: result
+
+    - debug: msg={{result.stdout}}
+
+    - fail: msg="{{ test_port }} oper status ERROR!"
+      when: result.stdout != "up"
+
+    - name: Testcase2_step2 Verify {{ test_port }} can not forward packet
+      include: roles/test/tasks/ptf_runner.yml
+      vars:
+          ptf_test_name: l2_port test
+          ptf_test_dir: ptftests
+          ptf_test_path: l2_port.L2PortTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - src_port={{ minigraph_port_indices[minigraph_vlans.values()[0]['members'][-1]] }}
+            - dst_port={{ test_port_index }}
+          ptf_extra_options: "--relax --debug info --log-file /tmp/l2_port_test2_step2.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_port_case2']}}"
+
+    - name: show interfaces status check port status
+      shell: show interfaces status
+
+  always:
+    - name: Startup {{ test_port }} by cli
+      shell: config interface startup {{ test_port }} 
+      become: true
+      ignore_errors: true
+

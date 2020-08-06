@@ -1,0 +1,95 @@
+# Test Case 2   Verify add route with 32-bit mask
+
+- set_fact:
+    nh_interface: "{{ dut_if_vlan }}"
+    nh_ip_mask: "{{ minigraph_vlan_interfaces|selectattr('attachto', 'match', dut_if_vlan) | map(attribute='subnet') | ipaddr(2) | first}}"
+    nh_interface_peer_port: "{{ dut_if_vlan_peer_port_list[0] }}"
+    
+- set_fact:
+    nh_ip: "{{nh_ip_mask|ipaddr('address')}}"
+
+- name: flush arp/neigh on dut if
+  shell: ip link set arp off dev {{ nh_interface }} && ip link set arp on dev {{ nh_interface }}
+  become: yes
+
+- name: config ip on host if
+  shell: ip addr add {{nh_ip_mask}} dev eth{{ nh_interface_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: sleep 2s
+  pause: seconds=2
+
+- name: ping peer ip addr
+  shell: ping {{ nh_ip }} -c 3 -i 0.2 -W 2
+  become: yes
+
+# Step 1
+- name: Add static routes with 32-bit mask
+  shell: vtysh -c "configure terminal" -c "ip route {{ item }} {{ nh_ip }}"
+  become: yes  
+  with_items:
+    - "{{static_routes32}}"
+
+# Step 2 verify routes are added success
+- name: Verify pre-configured static routes are added to ROUTE_TABLE in APPL_DB
+  shell: redis-cli -n 0 keys "ROUTE_TABLE:{{ item|ipaddr('address') }}" | grep "{{ item|ipaddr('address') }}"
+  with_items:
+    - "{{static_routes32}}"
+
+# Step 3 verify ip traffic can be forwarded via these routes
+- name: verify ip traffic can be forwarded via these routes
+  set_fact:
+    dst_ip_addr_list: "{{ static_routes32 | ipaddr('address') }}"
+    src_port: "{{ dut_if_1_peer_port }}"
+    dst_port_list: "{{ [nh_interface_peer_port]}}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_2 step3
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/fiball.testcase_2.step3.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step 4 delete static routes 
+- name: Del all static routes
+  shell: vtysh -c "configure terminal" -c "no ip route {{ item }} {{ nh_ip }}"
+  become: yes  
+  with_items:
+    - "{{static_routes32}}"
+
+# Step 5 verify routes are added success
+- name: Verify pre-configured static routes are deleted from ROUTE_TABLE in APPL_DB
+  shell: '! ( redis-cli -n 0 keys "ROUTE_TABLE:{{ item|ipaddr("address") }}" | grep "{{ item|ipaddr("address") }}" )'
+  with_items:
+    - "{{static_routes32}}"
+
+# Step 6 verify ip traffic cannot be forwarded via these routes
+- name: verify ip traffic cannot be forwarded via these routes
+  set_fact:
+    unexpected_ip_addr_list: "{{ static_routes32 | ipaddr('address') }}"
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_2 step6
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/fiball.testcase_2.step6.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"

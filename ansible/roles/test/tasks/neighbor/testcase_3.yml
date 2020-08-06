@@ -1,0 +1,109 @@
+# Test Case 3  Verify add and flush neighbor entry of route's nexthop
+- name: flush all neigh entry on dut if
+  shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+  become: yes
+
+- name: flush neigh table
+  shell: ip -s -s neigh flush all
+  become: yes
+  delegate_to: "{{ ptf_host }}"
+
+- name: Gernerate facts for ptf
+  set_fact:
+    dut_ip_addr: "{{ dut_ip_neigh_and_mask | ipaddr('address')}}"
+    host_ip_addr_and_mask: "{{ dut_ip_neigh_and_mask | ipaddr(2) }}"
+
+- set_fact:
+    host_ip_addr: "{{host_ip_addr_and_mask.split('/')[0]}}"
+    host_ip_mask: "{{host_ip_addr_and_mask.split('/')[1]}}"
+
+# create route entry
+  
+- name: Add one static ipv6 route
+  shell: vtysh -c "configure terminal" -c "ipv6 route {{item}} {{host_ip_addr}}"
+  become: yes  
+  with_items:
+    "{{ route_prefix_list }}"
+
+- name: Add test IP address to host if
+  shell: ip addr add {{ host_ip_addr_and_mask }} dev eth{{ dut_if_peer_port }}
+  delegate_to: "{{ ptf_host }}"
+
+- name: Wait some time for enable ipv6 address
+  pause: seconds=5
+
+#  ping to trigger dynamic arp resolve
+- name: Execute ping from host to switch to trigger ipv6 neigh resolve
+  shell: ping6 {{ dut_ip_addr }} -c 3 -i 0.2
+  register: pingrc
+  failed_when: pingrc.rc != 0
+  delegate_to: "{{ ptf_host }}"
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+- name: Run the test
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Neighbor Test
+        ptf_test_dir: ptftests
+        ptf_test_path: arp_test.ArpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ route_prefix_list | ipaddr('address') }}\"
+          - dst_port={{ dut_if_peer_port }}
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/neighbor.NeighborTest.testcase_3.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 2 flush the neighbor
+- name: flush arp table
+  shell: ip -s -s neigh flush {{host_ip_addr}}
+  become: yes
+  
+# verify neighbor is flushed
+- name: Use shell to show neighbor on dut_if
+  shell: ip -6 neigh show {{host_ip_addr}}
+  register: result
+  become: true
+
+- fail: msg="neighbor flush failed."
+  when: host_ip_addr in result.stdout and "FAILED" not in result.stdout
+
+
+# Choose the last lag interface for ip forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+    unexpected_ip_addr_list: []
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+# verify ip traffic can be forwarded via this route again
+- name: verify ip traffic can be forwarded via this route again
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Neighbor Test
+        ptf_test_dir: ptftests
+        ptf_test_path: arp_test.ArpTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ route_prefix_list | ipaddr('address') }}\"
+          - dst_port={{ dut_if_peer_port }}
+          - unexpected_ip_addr_list=\"{{ unexpected_ip_addr_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/neighbor.NeighborTest.testcase_3.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+

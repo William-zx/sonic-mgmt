@@ -1,0 +1,96 @@
+# This is the l2_fdb.yml helper playbook, and in this playbook 
+# verify the port mac is cleared when the port removed from vlan
+
+- set_fact:
+    vlan_id: 201
+    vlan_ports_list: [1,2]
+    pkt_num: 20
+
+- set_fact: port1_name="{{item.dev}}"
+  when: item.port_index == '{{vlan_ports_list[0]}}'
+  with_items: fdb_ports_list
+  
+- block:
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Add ports to vlan with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: vlan_ports_list
+
+  - name: Clear fdb all
+    shell: sonic-clear fdb all
+    become: true
+
+  - name: Testcase5_step1 Send multiple broadcast packets with different sources mac from port1
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case5\"
+          - test_step=\"step1\"
+          - pkt_num=\"{{pkt_num}}\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"0\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase5_step1 Send multiple broadcast packets with different sources mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test5_step1.log"
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - debug: var=result.stdout
+
+#  - fail: msg="mac not learning on {{port1_name}}, error"
+#    when: result.stdout.find(" {{port1_name}} ") == -1
+
+  - name: remove {{port1_name}} from Vlan{{vlan_id}}
+    shell: config vlan member del {{vlan_id}} {{port1_name}}
+    become: true
+    
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - debug: var=result.stdout
+
+#  - fail: msg="mac not be cleared on {{port1_name}} after removing {{port1_name}} from {{vlan_id}}, error"
+#    when: result.stdout.find(" {{port1_name}} ") != -1
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_fdb_case5']}}"
+
+  always:
+    - name: Del ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: vlan_ports_list
+
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

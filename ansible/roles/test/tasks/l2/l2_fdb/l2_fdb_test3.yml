@@ -1,0 +1,124 @@
+# This is the l2_fdb.yml helper playbook, and in this 
+# playbook verify time aging function of fdb entry. 
+
+- set_fact:
+    test_mac1: 00:00:00:00:00:01
+    vlan_id: 203
+    vlan_ports_list: [1,2,3,4,5]
+    config_aging_time: 200
+    wait_time: 230
+
+- set_fact: port1_name="{{item.dev}}"
+  when: item.port_index == '{{vlan_ports_list[0]}}'
+  with_items: fdb_ports_list
+
+- block:
+  - name: Generate config file for configing aging time of fdb 
+    template: src=roles/test/templates/l2/l2_fdb/l2_fdb_config_aging.j2
+              dest=/tmp/l2_fdb_config_aging.json.j2
+
+  - name: Copy config file to docker swss
+    shell: docker cp /tmp/l2_fdb_config_aging.json.j2 swss:/usr/share/sonic/templates/
+    become: true
+
+  - name: Load config file for generating new aging time for fdb
+    shell: docker exec -i swss swssconfig /usr/share/sonic/templates/l2_fdb_config_aging.json.j2
+    become: true
+  
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{ vlan_id }}
+    become: true
+    
+  - name: Add ports to Vlan{{vlan_id}} with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: vlan_ports_list
+    
+  - name: Testcase3_step1 Send l2 broadcast traffic with {{test_mac1}} src mac from port1
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case3\"
+          - test_step=\"step1\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"{{test_mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase3_step1 Send l2 broadcast traffic vith {{test_mac1}} src mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test3_step1.log"
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - debug: var=result.stdout
+
+#  - fail: msg="{{test_mac1}} not learning on {{port1_name}}, error"
+#    when: result.stdout.find("{{test_mac1}}  {{port1_name}}") == -1    
+  
+  - name: Waiting for fdb aging
+    pause: seconds={{wait_time}}
+  
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - debug: var=result.stdout
+
+#  - fail: msg="{{test_mac1}} not aging out on {{port1_name}}, error"
+#    when: result.stdout.find("{{test_mac1}}  {{port1_name}}") != -1     
+    
+  - name: Testcase3_step2 Send l2 unicast traffic with {{test_mac1}} src mac from port2
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case3\"
+          - test_step=\"step2\"
+          - pkt_num=\"0\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"0\"
+          - test_mac1=\"{{test_mac1}}\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase3_step2 Send l2 broadcast traffic vith {{test_mac1}} src mac from port1\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test3_step2.log"
+
+  rescue:
+    - set_fact: 
+        failed_case: "{{failed_case + ['l2_fdb_case3']}}"
+
+  always:
+    - set_fact: config_aging_time=300
+
+    - name: Generate config file for configing aging time of fdb 
+      template: src=roles/test/templates/l2/l2_fdb/l2_fdb_config_aging.j2
+                dest=/tmp/l2_fdb_config_aging.json.j2
+
+    - name: Copy config file to docker swss
+      shell: docker cp /tmp/l2_fdb_config_aging.json.j2 swss:/usr/share/sonic/templates/
+      become: true
+
+    - name: Load config file for generating new aging time for fdb
+      shell: docker exec -i swss swssconfig /usr/share/sonic/templates/l2_fdb_config_aging.json.j2
+      become: true
+
+    - name: Del ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: vlan_ports_list
+ 
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+

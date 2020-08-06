@@ -1,0 +1,4 @@
+dut_ip_neigh_and_mask: 2011::1/64
+        
+route_prefix_list:       
+    - fc32::3/96

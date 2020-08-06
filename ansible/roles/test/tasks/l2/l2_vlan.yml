@@ -1,0 +1,105 @@
+- fail: msg="Invalid testbed_type value '{{testbed_type}}'"
+  when: testbed_type not in [ 't0' ]
+
+- set_fact:
+    failed_case: []
+
+- name: Generate vlan_port information
+  template: src=roles/test/templates/l2/l2_vlan/l2_vlan_port_info.j2
+            dest=/tmp/l2_vlan_port_info.yml
+  connection: local
+
+- name: copy the test to ptf container
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ ptf_host }}"
+
+- name: Load vlan_port info from file
+  include_vars: '/tmp/l2_vlan_port_info.yml'
+ 
+- debug: var=vlan_ports_list
+
+########################################################################
+- name: Backup default config of dut
+  command: cp /etc/sonic/config_db.json /etc/sonic/config_db_vlan.json
+  become: true
+  ignore_errors: true
+
+- shell: config vlan member add {{ item.vid }} {{ item.dev }} --untagged
+  become: true
+  ignore_errors: true
+  with_items: vlan_ports_list
+
+- name: Del all ports from vlan on DUT
+  shell: config vlan member del {{ item.vid }} {{ item.dev }}
+  become: true
+  ignore_errors: true
+  with_items: vlan_ports_list
+
+- name: Save current config to configdb of dut
+  command: config save -y
+  become: true
+  ignore_errors: true
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+########################################################################
+
+- name: Testcase1 verify the addition and deletion of vlan and its member
+  include: l2/l2_vlan/l2_vlan_test1.yml 
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase2 verify port is added to vlan in untagged mode
+  include: l2/l2_vlan/l2_vlan_test2.yml
+
+- name: Testcase3 verify port is added to vlan in tagged mode
+  include: l2/l2_vlan/l2_vlan_test3.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase4 verify lag is added to vlan in untagged mode
+  include: l2/l2_vlan/l2_vlan_test4.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase5 verify lag is added to vlan in tagged mode
+  include: l2/l2_vlan/l2_vlan_test5.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase6 verify adding ip address and mask to vlan interface
+  include: l2/l2_vlan/l2_vlan_test6.yml
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+- name: Testcase7 verify adding ipv6 address and mask to vlan interface 
+  include: l2/l2_vlan/l2_vlan_test7.yml
+
+#- name: Reboot DUT
+#  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml
+
+#- name: Testcase8
+#  include: l2/l2_vlan/l2_vlan_test8.yml
+#######################################################################
+#- name: Add all ports to vlan on DUT
+#  shell: config vlan member add {{ item.vid }} {{ item.dev }} --untagged
+#  become: true
+#  ignore_errors: true
+#  with_items: vlan_ports_list
+
+- name: Recovery default config of dut
+  command: mv /etc/sonic/config_db_vlan.json /etc/sonic/config_db.json
+  become: true
+  ignore_errors: true
+
+- name: Reboot DUT
+  include: roles/test/tasks/l2/l2_common/reboot_sonic.yml  
+#######################################################################
+
+- fail: msg={{failed_case}}
+  when: "{{failed_case|length}} != 0"

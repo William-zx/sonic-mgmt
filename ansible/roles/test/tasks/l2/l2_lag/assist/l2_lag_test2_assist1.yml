@@ -1,0 +1,12 @@
+- set_fact: port_index="{{item}}"
+
+- set_fact: member="{{ item.dev }}"
+  when: item.port_index == '{{ port_index }}'
+  with_items: vlan_ports_list
+
+- debug: msg="portchannel_member={{member}}"
+
+- name: Add member to portchannel
+  shell: config portchannel member add PortChannel{{ item }} {{ member }}
+  become: true
+  ignore_errors: true

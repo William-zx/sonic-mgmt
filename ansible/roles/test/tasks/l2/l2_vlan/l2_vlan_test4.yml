@@ -1,0 +1,261 @@
+
+- set_fact:
+    vlan_id: 1004
+    portchannel_member_index_list: [1,2,3]
+    portchannel_name_1: PortChannel1
+    portchannel_name_2: PortChannel2
+    portchannel_name_3: PortChannel3
+    ptf_mac1: 00:00:00:00:44:11
+    ptf_mac2: 00:00:00:00:44:22
+
+- block:
+  - name: Generate portchannel config for ptf
+    template: src=l2/l2_vlan/l2_vlan_ptf_portchannel_config_general.j2 dest=/tmp/PortChannel{{ item }}.conf
+    connection: local
+    with_items: "{{ portchannel_member_index_list }}"
+
+  - name: Copy portchannel config files to ptf host
+    copy: src=/tmp/PortChannel{{ item }}.conf dest=/tmp/PortChannel{{ item }}.conf
+    delegate_to: "{{ ptf_host }}"
+    with_items: "{{ portchannel_member_index_list }}"   
+
+  - name: Copy ptf init script to {{ ptf_host }}
+    become: true
+    copy:
+      src: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_ptf.sh
+      dest: /tmp
+      mode: 0755
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Init portchannel on ptf
+    shell: /tmp/l2_vlan_ptf.sh startup_vlan_test4
+    become: true
+    delegate_to: "{{ ptf_host }}"
+
+  - name: Clear fdb
+    shell: fdbclear
+    become: true
+
+  - name: create Vlan{{vlan_id}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_create_vlan.yml
+    with_items: "{{vlan_id}}"
+
+  - name: create {{portchannel_name_1}}
+    shell: config portchannel add {{ portchannel_name_1 }}
+    become: true
+
+  - name: create {{portchannel_name_2}}
+    shell: config portchannel add {{ portchannel_name_2 }}
+    become: true
+
+  - name: create {{portchannel_name_3}}
+    shell: config portchannel add {{ portchannel_name_3 }}
+    become: true
+
+  - set_fact: portchannel_name={{portchannel_name_1}}
+
+  - name: add one member to {{portchannel_name_1}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_lag_member.yml
+    with_items: portchannel_member_index_list[0]
+
+  - set_fact: portchannel_name={{portchannel_name_2}}
+   
+  - name: add one member to {{portchannel_name_2}} 
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_lag_member.yml
+    with_items: portchannel_member_index_list[1]
+
+  - set_fact: portchannel_name={{portchannel_name_3}}
+
+  - name: add one member to {{portchannel_name_3}}
+    include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_add_lag_member.yml
+    with_items: portchannel_member_index_list[2]      
+
+  - name: add {{portchannel_name_1}} to Vlan{{vlan_id}} with untagged mode
+    shell: config vlan member add {{ vlan_id }} {{ portchannel_name_1 }} --untagged
+    become: true
+
+  - name: add {{portchannel_name_2}} to Vlan{{vlan_id}} with untagged mode
+    shell: config vlan member add {{ vlan_id }} {{ portchannel_name_2 }} --untagged
+    become: true
+
+  - name: add {{portchannel_name_3}} to Vlan{{vlan_id}} with untagged mode
+    shell: config vlan member add {{ vlan_id }} {{ portchannel_name_3 }} --untagged
+    become: true
+
+  - pause: seconds=3
+
+  - name: Testcase4 verify l2 traffic with untagged received from {{portchannel_name_1}} can be forwarded in vlan
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case4\"
+          - test_step=\"step1\"
+          - test_member_list1=\"{{ portchannel_member_index_list }}\"
+          - test_member_list2=\"0\"
+          - test_vid=\"{{ vlan_id }}\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"{{ ptf_mac2 }}\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase4 verify l2 traffic with untagged received from portchannel1 can be forwarded in vlan\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test4_step1.log"
+
+ # - shell: show mac
+ #   become: true
+ #   register: result
+
+ # - fail: msg="{{ Mac learning failed! }}"
+ #   when: result.stdout.find(" {{vlan_id}}  {{ptf_mac1}}") == -1
+
+  - name: Testcase4 verify the l2 traffic received from {{portchannel_name_1}} and tagged the same as the VID can be forwarded in vlan
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case4\"
+          - test_step=\"step2\"
+          - test_member_list1=\"{{ portchannel_member_index_list }}\"
+          - test_member_list2=\"0\"
+          - test_vid=\"{{ vlan_id }}\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"{{ ptf_mac2 }}\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase4 verify the l2 traffic received from portchannel1 and tagged the same as the VID can be forwarded in vlan\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test4_step2.log"
+
+ # - shell: show mac
+ #   become: true
+ #   register: result
+
+ # - fail: msg="{{ Mac learning failed! }}"
+ #   when: result.stdout.find(" {{vlan_id}}  {{ptf_mac2}}") == -1
+
+  - name: Testcase4 verify the l2 traffic received from {{portchannel_name_1}} and unlike VID tag can not be forwarded in vlan
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case4\"
+          - test_step=\"step3\"
+          - test_member_list1=\"{{ portchannel_member_index_list }}\"
+          - test_member_list2=\"0\"
+          - test_vid=\"{{ vlan_id }}\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"{{ ptf_mac2 }}\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase4 verify the l2 traffic received from portchannel1 and unlike VID tag can not be forwarded in vlan\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test4_step3.log"
+
+  - name: Testcase4 verify that l2 traffic sent from untagged port has no tag
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_vlan test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_vlan.L2VlanTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case4\"
+          - test_step = \"step4\"
+          - test_member_list1=\"{{ portchannel_member_index_list }}\"
+          - test_member_list2=\"0\"
+          - test_vid=\"{{ vlan_id }}\"
+          - test_pvid=\"0\"
+          - test_dut_mac1=\"0\"
+          - test_dut_mac2=\"0\"
+          - test_ptf_mac1=\"{{ ptf_mac1 }}\"
+          - test_ptf_mac2=\"{{ ptf_mac2 }}\"
+          - test_ip1=\"0\"
+          - test_ip2=\"0\"
+          - test_case_str=\"Testcase4 verify that l2 traffic sent from untagged port has no tag\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_vlan_test4_step4.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_vlan_case4']}}"
+
+  always:
+    - name: Del portchannel on ptf
+      shell: /tmp/l2_vlan_ptf.sh delete_vlan_test4
+      become: true
+      delegate_to: "{{ ptf_host }}"
+
+    - name: Del {{portchannel_name_1}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name_1 }}
+      become: true
+      ignore_errors: true
+
+    - name: Del {{portchannel_name_2}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name_2 }}
+      become: true
+      ignore_errors: true
+
+    - name: Del {{portchannel_name_3}} from Vlan{{vlan_id}}
+      shell: config vlan member del {{ vlan_id }} {{ portchannel_name_3 }}
+      become: true
+      ignore_errors: true
+    
+    - set_fact: portchannel_name={{portchannel_name_1}}
+    
+    - name: Del member from {{portchannel_name_1}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_lag_member.yml
+      with_items: portchannel_member_index_list[0]
+    
+    - set_fact: portchannel_name={{portchannel_name_2}}
+    
+    - name: Del member from {{portchannel_name_2}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_lag_member.yml
+      with_items: portchannel_member_index_list[1]
+
+    - set_fact: portchannel_name={{portchannel_name_3}}
+    
+    - name: Del member from {{portchannel_name_3}}
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_lag_member.yml
+      with_items: portchannel_member_index_list[2]
+
+    - name: Del {{portchannel_name_1}}
+      shell: config portchannel del {{ portchannel_name_1 }}
+      become: true
+      ignore_errors: true
+   
+    - name: Del {{portchannel_name_2}}
+      shell: config portchannel del {{ portchannel_name_2 }}
+      become: true
+      ignore_errors: true
+
+    - name: Del {{portchannel_name_3}}
+      shell: config portchannel del {{ portchannel_name_3 }}
+      become: true
+      ignore_errors: true
+ 
+    - name: Del Vlan{{vlan_id}} 
+      include: roles/test/tasks/l2/l2_vlan/assist/l2_vlan_del_vlan.yml
+      with_items: "{{ vlan_id }}"
+

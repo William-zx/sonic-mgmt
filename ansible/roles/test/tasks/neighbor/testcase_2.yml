@@ -1,0 +1,109 @@
+# Test Case 2 Verify static neighbor functionon interface
+- name: flush all neigh entry on dut if
+  shell: ip link set {{ dut_if }} arp off && ip link set {{ dut_if }} arp on
+  become: yes
+
+- name: flush neigh table
+  shell: ip -s -s neigh flush all
+  become: yes
+  delegate_to: "{{ ptf_host }}"
+
+# use second ipv6 addr of preconfigured ip network as ptf if ip
+- name: Gernerate test ipv6 address for static neighbor
+  set_fact:
+    host_ip_addr_and_mask: "{{ dut_ip_neigh_and_mask | ipaddr(2) }}"
+    host_mac: "00:00:00:22:22:22"
+
+- set_fact:
+    host_ip_addr: "{{host_ip_addr_and_mask.split('/')[0]}}"
+    host_ip_mask: "{{host_ip_addr_and_mask.split('/')[1]}}"
+
+- name: Add static ipv6 neighbor
+  shell: ip neigh replace {{ host_ip_addr }} lladdr {{ host_mac }} dev {{ dut_if }}
+  become: yes
+
+- name: Add static mac for vlan rif
+  shell: bridge fdb replace {{ host_mac }} dev {{ dut_if_port }} vlan {{ vid }} master static
+  become: yes
+  when: rif=='vlan'
+
+# verify static neighbor configured on interface  
+- name: Use shell to show neighbor on dut_if
+  shell: ip -6 neigh show
+  register: result
+  become: true
+
+- fail: msg="static neighbor add failed."
+  when: host_ip_addr not in result.stdout
+
+- name: Choose the last lag interface for ip forwarding test with dut inteface.
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+- block:
+  - name: Run the test
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+          ptf_test_name: Neighbor Test
+          ptf_test_dir: ptftests
+          ptf_test_path: arp_test.ArpTest
+          ptf_platform_dir: ptftests
+          ptf_platform: remote
+          ptf_test_params:
+            - verbose=True
+            - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+            - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+            - expected_dst_mac=\"{{ host_mac }}\"
+            - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+            - dst_port={{ dut_if_peer_port }}
+            - unexpected_ip_addr_list=\"[]\"
+          ptf_extra_options: "--relax --debug info --log-file /tmp/neighbor.NeighborTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+
+# Step 2 delete static neighbor
+- name: Remove static mac entry
+  shell: bridge fdb del {{ host_mac }} dev {{ dut_if_port }} vlan {{vid}} master
+  become: yes
+  when: rif=='vlan'
+
+- name: Remove static v6 neighbor
+  shell: ip -s -s neigh del {{ host_ip_addr }} dev {{ dut_if }}
+  become: yes    
+  
+# verify static neighbor are deleted
+- name: Use shell to show neighbor on dut_if
+  shell: ip -6 neigh show {{ host_ip_addr }}
+  register: result
+  become: true
+
+- fail: msg="neighbor delete failed."
+  when: host_ip_addr in result.stdout and "FAILED" not in result.stdout
+
+# Choose the last lag interface for ipv6 forwarding test with dut inteface.
+- name: Generate ptf test params
+  set_fact:
+    forwarding_rif: "{{ minigraph_portchannel_interfaces[-1]['attachto'] }}"
+
+- name: Wait some time for stream test
+  pause: seconds=5
+
+- name: verify ip traffic cannot be forwarded via this arp
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+    ptf_test_name: Neighbor Test
+    ptf_test_dir: ptftests
+    ptf_test_path: arp_test.ArpTest
+    ptf_platform_dir: ptftests
+    ptf_platform: remote
+    ptf_test_params:
+      - verbose=False
+      - src_port={{ minigraph_port_indices[minigraph_portchannels[forwarding_rif]['members'][0]] }}
+      - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+      - expected_dst_mac=\"{{ host_mac }}\"
+      - dst_ip_addr_list=\"{{ [host_ip_addr] }}\"
+      - dst_port={{ dut_if_peer_port }}
+      - unexpected_ip_addr_list=\"{{ [host_ip_addr] }}\"
+    ptf_extra_options: "--relax --debug info --log-file /tmp/neighbor.NeighborTest.testcase_2.{{ lookup('pipe','date +%Y-%m-%d-%H:%M:%S') }}.log"
+

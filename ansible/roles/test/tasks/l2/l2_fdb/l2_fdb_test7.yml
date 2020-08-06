@@ -1,0 +1,113 @@
+# This is the l2_fdb.yml helper playbook, and verify the fdb 
+# table can be cleared using the command:sonic-clear fdb all.
+
+- set_fact:
+    vlan_id: 207
+    vlan_ports_list: [1,2,3,4,5]
+    pkt_num: 200
+    mac_list: ["00:00:00:00:01:07","00:00:00:00:02:07","00:00:00:00:03:07","00:00:00:00:04:07"]
+
+- block:
+  - name: Create Vlan{{vlan_id}}
+    shell: config vlan add {{ vlan_id }}
+    become: true
+
+  - name: Add ports to vlan with untagged mode
+    include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_add_port_to_vlan_untagged.yml
+    with_items: vlan_ports_list
+
+  - name: Clear fdb all
+    shell: sonic-clear fdb all
+    become: true
+
+  - name: Testcase7_step1 Send {{pkt_num}} l2 packets with different src mac from port1/2/3/4 separately 
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case7\"
+          - test_step=\"step1\"
+          - pkt_num=\"{{pkt_num}}\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"{{ mac_list }}\"
+          - test_mac1=\"0\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase7_step1 Send {{pkt_num}} l2 packets with different src mac from port1/2/3/4 separately \"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test7_step1.log"
+
+#  - shell: show mac |awk '{print $1}'
+#    become: true
+#    register: result
+    
+#  - fail: msg="The number of MAC learning items is not enough , error"
+#    when: result.stdout.find("800") == -1
+
+  - name: Testcase7_step2 Send l2 packet with mac learned on port1/2/3/4 from port5, and verify that each port receives the corresponding traffic. 
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case7\"
+          - test_step=\"step2\"
+          - pkt_num=\"{{pkt_num}}\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"{{ mac_list }}\"
+          - test_mac1=\"0\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase7_step2 Send l2 packet with mac learned on port1/2/3/4 from port5, and verify that each port receives the corresponding traffic.\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test7_step2.log"
+
+  - name: Clear fdb all
+    shell: sonic-clear fdb all
+    become: true
+
+#  - shell: show mac
+#    become: true
+#    register: result
+
+#  - fail: msg="{{ delete all fdb entry failed!}}"
+#    when: result.stdout.find("Total number of entries 0") == -1
+
+  - name: Testcase7_step3 Send l2 packet with mac learned on port1/2/3/4 from port5, and verify that traffic will flood in Vlan{{vlan_id}}
+    include: roles/test/tasks/ptf_runner.yml
+    vars:
+        ptf_test_name: l2_fdb test
+        ptf_test_dir: ptftests
+        ptf_test_path: l2_fdb.L2FdbTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - testbed_type=\"{{ testbed_type }}\"
+          - test_case=\"case7\"
+          - test_step=\"step3\"
+          - pkt_num=\"{{pkt_num}}\"
+          - test_member_list1=\"{{ vlan_ports_list}}\"
+          - test_member_list2=\"{{ mac_list }}\"
+          - test_mac1=\"0\"
+          - test_mac2=\"0\"
+          - test_case_str = \"Testcase7_step3 Send l2 packet with mac learned on port1/2/3/4 from port5, and verify that traffic will flood in Vlan{{vlan_id}}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/l2_fdb_test7_step3.log"
+
+  rescue:
+    - set_fact: failed_case="{{failed_case + ['l2_fdb_case7']}}"
+
+  always:
+    - name: Del ports from Vlan{{vlan_id}}
+      include: roles/test/tasks/l2/l2_fdb/assist/l2_fdb_del_port_from_vlan.yml
+      with_items: vlan_ports_list
+
+    - name: Del Vlan{{vlan_id}}
+      shell: config vlan del {{ vlan_id }}
+      become: true
+      ignore_errors: true
+

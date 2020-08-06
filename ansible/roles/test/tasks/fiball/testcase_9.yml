@@ -1,0 +1,82 @@
+# Test Case 9  Verify Route nexthop intf change
+
+- set_fact:
+    static_route: "{{ static_routes.prefix8 }}"
+    nh_interface_1: "{{ dut_if_1 }}"
+    nh_interface_2: "{{ dut_if_2 }}"
+    nh_interface_peer_port_1: "{{ dut_if_1_peer_port }}"
+    nh_interface_peer_port_2: "{{ dut_if_2_peer_port }}"
+    nh_ip_1: "{{ minigraph_portchannel_interfaces|selectattr('attachto', 'match', dut_if_1) | map(attribute='peer_addr') | ipv4 | first}}"
+    nh_ip_2: "{{ minigraph_portchannel_interfaces|selectattr('attachto', 'match', dut_if_2) | map(attribute='peer_addr') | ipv4 | first}}"
+
+- name: flush arp/neigh on dut if
+  shell: ip link set arp off dev {{ item }} && ip link set arp on dev {{ item }}
+  with_items:
+    - "{{ nh_interface_1 }}"
+    - "{{ nh_interface_2 }}"
+  become: yes
+
+# Step1 add route which nexthop outgoing to rif1-{{ nh_interface_1  }}
+- name: Add static route which nexthop outgoing to rif1-{{ nh_interface_1  }}.
+  shell: vtysh -c "configure terminal" -c "ip route {{ static_route }} {{ nh_ip_1 }} 15"
+  become: yes  
+
+# Step2 verify route are added success
+- name: Verify route nexthop is rif1 by checking ROUTE_TABLE in APPL_DB
+  shell: redis-cli -n 0 hgetall ROUTE_TABLE:{{ static_route }} | grep {{ nh_interface_1 }}
+  become: true
+
+# Step3 verify ip traffic can be forwarded via this route
+- name: Generate ptf test params
+  set_fact:
+    ingress_rif: "{{ dut_if_vlan }}"
+    dst_ip_addr_list: "{{ [dst_for_static_route] }}"
+    dst_port_list: "{{ [nh_interface_peer_port_1] }}"
+    src_port: "{{ dut_if_vlan_peer_port_list[0] }}"
+
+- name: verify ip traffic can be forwarded via this route
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_9 step3
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/fiball.testcase_9.step3.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+
+# Step4 change route nexthop outgoing to rif2-{{ nh_interface_2 }}
+- name: Change route nexthop outgoing to rif2-{{ nh_interface_2 }}
+  shell: vtysh -c "configure terminal" -c "ip route {{ static_route }} {{ nh_ip_2 }} 10"
+  become: yes  
+
+# Step5 verify route are added success
+- name: Verify route nexthop is rif2 by checking ROUTE_TABLE in APPL_DB
+  shell: redis-cli -n 0 hgetall ROUTE_TABLE:{{ static_route }} | grep {{ nh_interface_2  }}
+  become: true
+
+- name: Update expect recv port.
+  set_fact:
+    dst_port_list: "{{ [nh_interface_peer_port_2] }}"
+
+# Step6 verify ip traffic can be forwarded via this route, and outgoging port of vlan rif is changed accordingly
+- name: verify ip traffic can be forwarded via this route, and outgoging port of vlan rif is changed accordingly
+  include: roles/test/tasks/ptf_runner.yml
+  vars:
+        ptf_test_name: Fiball testcase_9 step6
+        ptf_test_dir: ptftests
+        ptf_test_path: fiball_test.FiballTest
+        ptf_platform_dir: ptftests
+        ptf_platform: remote
+        ptf_test_params:
+          - verbose=True
+          - src_port={{ src_port }}
+          - router_mac=\"{{ ansible_Ethernet0['macaddress'] }}\"
+          - dst_ip_addr_list=\"{{ dst_ip_addr_list }}\"
+          - dst_port_list=\"{{ dst_port_list }}\"
+        ptf_extra_options: "--relax --debug info --log-file /tmp/fiball.testcase_9.step6.{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"

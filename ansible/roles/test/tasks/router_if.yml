@@ -1,0 +1,83 @@
+# Set facts
+- set_fact:
+    testname: router_if
+    out_dir: /tmp/
+    run_dir: /tmp/
+    failed_case: []
+
+- name: Create tmp dir
+  file:
+    path: /tmp/router_if/
+    state: directory
+
+- name: Remove existing IPs from PTF host
+  script: roles/test/files/helpers/remove_ip.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Set unique MACs to PTF interfaces
+  script: roles/test/files/helpers/change_mac.sh
+  delegate_to: "{{ptf_host}}"
+
+- name: Copy tests to PTF
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ptf_host}}"
+
+# Gather minigraph facts
+# In the future, we will change it to parse config_db.json, and gather configdb facts
+- name: Gathering minigraph facts about the device
+  minigraph_facts: host={{ inventory_hostname }}
+
+# Run port rif test
+- block:
+  - name: Use the first port of vlan in T0 topo for port rif test 
+    set_fact:
+      rif: "port"
+      vid:  "{{ minigraph_vlans.keys()[0][4:] }}"
+      dut_if: "{{ minigraph_vlans.values()[0]['members'][0] }}"
+
+  - name: Remove port from vlan
+    shell: config vlan member del {{ vid }} {{ dut_if }}
+    become: yes
+    ignore_errors: true
+
+  - name: workaround for remove port from vlan. Until rm34965 is fixed.
+    shell: ip link set dev {{ dut_if }} nomaster
+    become: yes
+  
+  - name: Run rif test on port rif
+    include: roles/test/tasks/router_if/router_if_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[dut_if] }}"
+  
+  always:
+    - name: Add port to vlan again
+      shell: config vlan member add {{ vid }} {{ dut_if }} -u
+      become: yes
+      ignore_errors: true
+
+# Run vlan rif test
+- block:
+  - name: Use the first vlan for vlan rif test 
+    set_fact:
+      rif: "vlan"
+      dut_if: "{{ minigraph_vlan_interfaces[0]['attachto'] }}"
+    
+  - name: Run test for vlan rif
+    include: roles/test/tasks/router_if/router_if_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[minigraph_vlans[dut_if]['members'][0]] }}"
+
+# Run lag rif test
+- block:
+  - name: Use the first lag for lag rif test 
+    set_fact:
+      rif: "lag"
+      dut_if: "{{ minigraph_portchannel_interfaces[0]['attachto'] }}"
+  
+  - name: Run test for lag rif
+    include: roles/test/tasks/router_if/router_if_runner.yml
+    vars:
+      dut_if_peer_port: "{{ minigraph_port_indices[minigraph_portchannels[dut_if]['members'][0]] }}"
+
+- fail: msg="Failed {{failed_case|length}} cases - {{ failed_case }}"
+  when: "{{failed_case|length}} != 0"

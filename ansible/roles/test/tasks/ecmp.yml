@@ -1,0 +1,70 @@
+- set_fact:
+    failed_case: []
+
+# Gather minigraph facts
+# In the future, we will change it to parse config_db.json, and gather configdb facts
+- name: Gathering minigraph facts about the device
+  minigraph_facts: host={{ inventory_hostname }}
+
+# Run ecmp on lag rif test
+- name: Use the first lag for ecmp on lag rif test
+  set_fact:
+    dut_if: "{{ minigraph_vlans.values()[0]['members'][0] }}"
+
+- set_fact:
+    dut_if_peer_port: "{{ minigraph_port_indices[dut_if] }}"
+
+- name: Import all ip addr info from file
+  include_vars: "roles/test/tasks/ecmp/{{ item }}"
+  with_items:
+    - "ip_addr_info.yml"
+    - "ip_addr_ecmp_info.yml"
+
+- name: Copy the test to ptf container
+  copy: src=roles/test/files/ptftests dest=/root
+  delegate_to: "{{ ptf_host }}"
+
+# Judging Version (After branch201811, use config.json)
+#- name: Use ps to search portmgrd
+#  shell: ps aux |grep portmgrd
+#  register: result
+#  become: true
+
+#- name: Set flag with ps result
+#  set_fact:
+#     use_config_json: false
+#  when: '"/usr/bin/portmgrd" not in result.stdout'
+
+- block:
+  - set_fact:
+      case_name: "ecmp_testcase_1"
+
+  - name: Run testcase 1 - Verify load-balance after link down, ecmp group remove
+    include: roles/test/tasks/ecmp/testcase_1.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+  always:
+    - name: startup portchannel0001 to ecmp
+      shell: config interface startup {{ item }}
+      become: yes
+      with_items: "{{ minigraph_portchannels.keys() }}"
+
+    - pause: seconds=35
+
+- block:
+  - set_fact:
+      case_name: "ecmp_testcase_2"
+
+  - name: Run testcase 2 - Verify ecmp nexthop remove
+    include: roles/test/tasks/ecmp/testcase_2.yml
+
+  rescue:
+    - set_fact:
+        failed_case: "{{failed_case + [case_name]}}"
+
+- fail: msg="Failed {{failed_case|length}} cases - {{ failed_case }}"
+  when: "{{failed_case|length}} != 0"      
+
